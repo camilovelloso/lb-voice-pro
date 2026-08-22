@@ -259,6 +259,14 @@ input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius
 input[type="range"]:focus-visible, .drawer-toggle:focus-visible {
   outline: 2px solid var(--brass); outline-offset: 2px;
 }
+.headphone-override {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--muted);
+  letter-spacing: 0.02em; margin-bottom: 10px;
+}
+.headphone-override input {
+  width: 14px; height: 14px; accent-color: var(--brass); cursor: pointer; flex-shrink: 0;
+}
 .serial-plate {
   text-align: center; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em;
   color: var(--muted-dim); margin-top: 18px; text-transform: uppercase;
@@ -373,6 +381,10 @@ input[type="range"]:focus-visible, .drawer-toggle:focus-visible {
 
     <div class="guitar-panel" id="harmonyPanel">
       <div class="vu-label">Segunda voz</div>
+      <label class="headphone-override" for="headphoneOverrideCheckbox">
+        <input type="checkbox" id="headphoneOverrideCheckbox" />
+        <span>Estou usando fone de ouvido (libera On/Auto manualmente)</span>
+      </label>
       <div class="mode-toggle" style="margin-bottom: 10px;">
         <button class="mode-btn active" id="harmonyOffBtn" type="button">Off</button>
         <button class="mode-btn" id="harmonyOnBtn" type="button">On</button>
@@ -818,6 +830,7 @@ const modeGuitarBtn = document.getElementById('modeGuitarBtn');
 const guitarPanel = document.getElementById('guitarPanel');
 const guitarStringsContainer = document.getElementById('guitarStrings');
 const guitarHint = document.getElementById('guitarHint');
+const headphoneOverrideCheckbox = document.getElementById('headphoneOverrideCheckbox');
 
 // ---- Proteção contra microfonia ----
 // O app roda com echoCancellation:false (necessário para não distorcer o
@@ -827,6 +840,14 @@ const guitarHint = document.getElementById('guitarHint');
 // fisicamente não realimenta o mic) e, se não for, silenciar por padrão.
 const HEADPHONE_KEYWORDS = ['fone', 'headphone', 'headset', 'earbud', 'earphone', 'airpod', 'fones de ouvido', 'headfone'];
 let lastOutputLooksLikeHeadphone = null; // true | false | null (desconhecido)
+
+// Muitos fones Bluetooth reais (ex.: "Galaxy Buds", "JBL Tune") não têm
+// nenhuma das palavras-chave acima no nome do dispositivo, então a detecção
+// automática às vezes erra e trata um fone de verdade como se fosse
+// caixa/alto-falante. Esse checkbox deixa a pessoa confirmar manualmente que
+// está de fone, sobrepondo a detecção automática (mas nunca ao contrário:
+// desmarcado, quem decide continua sendo a detecção normal).
+let manualHeadphoneOverride = false;
 
 function looksLikeHeadphone(label) {
   if (!label) return null;
@@ -1174,7 +1195,12 @@ async function detectOutputRoute() {
 // e avisa. Só decide quando o rótulo do dispositivo é conhecido (label !==
 // vazio) — sem essa informação, não arriscamos mudar o volume sem avisar.
 function applyFeedbackSafety() {
-  if (lastOutputLooksLikeHeadphone === false) {
+  // A confirmação manual do usuário tem prioridade sobre a detecção
+  // automática por nome do dispositivo (que pode falhar em reconhecer
+  // fones Bluetooth reais — ver comentário acima de manualHeadphoneOverride).
+  const effectiveLooksLikeHeadphone = manualHeadphoneOverride ? true : lastOutputLooksLikeHeadphone;
+
+  if (effectiveLooksLikeHeadphone === false) {
     const currentGain = Number(outputGainSlider.value);
     if (currentGain > 0) {
       outputGainSlider.value = 0;
@@ -1185,18 +1211,24 @@ function applyFeedbackSafety() {
     harmonyOnBtn.disabled = true;
     harmonyAutoBtn.disabled = true;
     if (!harmonyOffBtn.classList.contains('active')) {
-      harmonyHint.textContent = '🔇 2ª voz bloqueada: use fone de ouvido para evitar microfonia.';
+      harmonyHint.textContent = '🔇 2ª voz bloqueada: use fone de ouvido para evitar microfonia (ou confirme "Estou usando fone de ouvido" acima, se a detecção automática estiver errada).';
     }
     showFeedbackWarning();
-  } else if (lastOutputLooksLikeHeadphone === true) {
+  } else if (effectiveLooksLikeHeadphone === true) {
     engine.setHarmonySafeToPlay(true);
     harmonyOnBtn.disabled = false;
     harmonyAutoBtn.disabled = false;
     updateHarmonyHint();
-    // Fone detectado: risco de microfonia é baixíssimo, não força nada.
+    // Fone detectado (ou confirmado manualmente): risco de microfonia é
+    // baixíssimo, não força nada.
     if (errorBanner.textContent.includes('microfonia')) clearError();
   }
 }
+
+headphoneOverrideCheckbox.addEventListener('change', (e) => {
+  manualHeadphoneOverride = e.target.checked;
+  applyFeedbackSafety();
+});
 
 if (!checkSupport()) {
   showError('Este navegador não tem suporte a AudioWorklet/getUserMedia. Use Chrome ou Edge atualizados em Android.');
@@ -1218,4 +1250,4 @@ if (!checkSupport()) {
 })();
 </script>
 </body>
-        </html>
+</html>
