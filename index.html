@@ -295,6 +295,7 @@ input[type="range"]:focus-visible, .drawer-toggle:focus-visible {
 
     <div class="error-banner" id="errorBanner"></div>
     <div class="info-banner" id="infoBanner"></div>
+    <div class="info-banner" id="notchBanner"></div>
 
     <div class="mode-toggle">
       <button class="mode-btn active" id="modeVoiceBtn" type="button">🎤 Voz</button>
@@ -390,9 +391,20 @@ input[type="range"]:focus-visible, .drawer-toggle:focus-visible {
       <select id="outputRouteSelect" class="output-route-select">
         <option value="auto" selected>Detectar automaticamente</option>
         <option value="headphone">Fone de ouvido (com ou sem fio)</option>
+        <option value="phone-speaker">Alto-falante do celular</option>
+        <option value="wired-speaker">Caixa com fio (cabo P2/USB-C)</option>
         <option value="bluetooth-speaker">Caixa Bluetooth / alto-falante externo</option>
       </select>
       <div class="string-hint" id="outputRouteHint">Detecção automática ativa.</div>
+    </div>
+
+    <div class="guitar-panel" id="processingPanel">
+      <div class="vu-label">Processamento vocal</div>
+      <div class="mode-toggle" style="margin-bottom: 4px;">
+        <button class="mode-btn" id="processingOffBtn" type="button">Off</button>
+        <button class="mode-btn active" id="processingOnBtn" type="button">On</button>
+      </div>
+      <div class="string-hint" id="processingHint">On — corta ronco grave, realça clareza e equilibra o volume da voz.</div>
     </div>
 
     <div class="guitar-panel" id="harmonyPanel">
@@ -439,6 +451,8 @@ input[type="range"]:focus-visible, .drawer-toggle:focus-visible {
       </div>
       <div id="outputRouteText">🔊 Saída padrão</div>
     </div>
+
+    <div class="string-hint" id="feedbackGuardHint" style="margin-top: 6px;"></div>
 
     <div class="serial-plate" id="serialPlate">Unidade artesanal · Nº —</div>
   </main>
@@ -593,6 +607,26 @@ class PassthroughProcessor extends AudioWorkletProcessor {
 registerProcessor('passthrough-processor', PassthroughProcessor);
 `;
 
+// ---- Detecção de microfonia por banda estreita ----
+// Diferente de olhar só o volume total (RMS), aqui a gente analisa o
+// espectro de frequência (FFT via AnalyserNode) procurando por um pico
+// estreito e crescente — a assinatura de um loop de realimentação real,
+// já que voz e música espalham energia em várias frequências ao mesmo
+// tempo, enquanto microfonia se concentra numa só. Ao confirmar, aplica um
+// filtro notch cirúrgico só naquela frequência, sem cortar o resto do som.
+const FEEDBACK_ANALYSIS_INTERVAL_MS = 70;
+const FEEDBACK_FREQ_MIN_HZ = 150;
+const FEEDBACK_FREQ_MAX_HZ = 8000;
+const FEEDBACK_PEAKINESS_DB = 14;          // quanto o pico precisa se destacar da média do espectro
+const FEEDBACK_ABS_THRESHOLD_DB = -30;     // nível mínimo absoluto pra virar candidato
+const FEEDBACK_HISTORY_LEN = 3;            // leituras seguidas de crescimento pra confirmar
+const FEEDBACK_GROWTH_STEP_DB = 0.5;       // crescimento mínimo exigido entre leituras
+const FEEDBACK_RELEASE_THRESHOLD_DB = -45; // abaixo disso, considera resolvido
+const FEEDBACK_RELEASE_POLLS = 8;          // leituras calmas seguidas antes de soltar o notch
+const FEEDBACK_NOTCH_COUNT = 2;            // filtros notch simultâneos disponíveis
+const FEEDBACK_NOTCH_Q = 10;
+const FEEDBACK_NOTCH_INERT_HZ = 21000;     // frequência "desligada" (fora do espectro de voz)
+
 class AudioEngine {
   constructor() {
     this.context = null;
@@ -622,6 +656,38 @@ class AudioEngine {
     this.harmonySafeToPlay = true;
     this._harmonyAutoLastNote = null;
     this._harmonyAutoHoldStart = 0;
+
+    // Cadeia de processamento vocal (aplicada só no sinal de monitoramento,
+    // nunca no buffer usado pela detecção de pitch dentro do worklet).
+    // Quando desativada, os nós continuam no grafo mas com parâmetros
+    // neutros (bypass), pra não precisar reconectar o grafo em tempo real.
+    this.highpassNode = null;
+    this.presenceNode = null;
+    this.compressorNode = null;
+    this.makeupGainNode = null;
+    this.vocalProcessingEnabled = true;
+
+    // Limitador de segurança: sempre ativo, independente do processamento
+    // vocal, pra conter picos súbitos (início de microfonia, plosivas, etc).
+    this.limiterNode = null;
+
+    // Rede de segurança extra contra microfonia: monitora o nível de
+    // entrada e, se detectar crescimento sustentado típico de um loop de
+    // realimentação, corta a saída automaticamente.
+    this._feedbackRmsHistory = [];
+    this.onFeedbackDetected = null;
+
+    // Detecção por banda estreita (ver constantes FEEDBACK_* acima): tap de
+    // análise de espectro + filtros notch dinâmicos, mais precisos que o
+    // corte geral acima, que fica só como último recurso.
+    this.analyserNode = null;
+    this._analyserSink = null;
+    this._analyserData = null;
+    this._notchFilters = [];
+    this._feedbackPollTimer = null;
+    this._feedbackCandidate = null;
+    this.onFeedbackNotchEngaged = null;
+    this.onFeedbackNotchReleased = null;
   }
 
   async start() {
@@ -653,19 +719,96 @@ class AudioEngine {
         numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1,
       });
       this.workletNode.port.onmessage = (event) => {
-        if (event.data.type === 'level' && this.onLevelUpdate) this.onLevelUpdate(event.data.rms);
+        if (event.data.type === 'level') {
+          this._checkFeedback(event.data.rms);
+          if (this.onLevelUpdate) this.onLevelUpdate(event.data.rms);
+        }
         if (event.data.type === 'pitch') {
           this._updateHarmony(event.data);
           if (this.onPitchUpdate) this.onPitchUpdate(event.data);
         }
       };
 
+      // Cadeia de monitoramento: worklet (sinal já com ganho de entrada,
+      // mas cru pra fins de análise) -> highpass -> presença -> compressor
+      // -> ganho de saída -> limitador de segurança -> destino.
+      // Quando vocalProcessingEnabled é false, highpass/presença/compressor
+      // ficam com parâmetros neutros (bypass), então dá pra alternar em
+      // tempo real sem reconectar nada.
+      this.highpassNode = this.context.createBiquadFilter();
+      this.highpassNode.type = 'highpass';
+      this.highpassNode.frequency.value = this.vocalProcessingEnabled ? 90 : 20;
+      this.highpassNode.Q.value = 0.707;
+
+      this.presenceNode = this.context.createBiquadFilter();
+      this.presenceNode.type = 'peaking';
+      this.presenceNode.frequency.value = 4000;
+      this.presenceNode.Q.value = 1;
+      this.presenceNode.gain.value = this.vocalProcessingEnabled ? 3 : 0;
+
+      this.compressorNode = this.context.createDynamicsCompressor();
+      this.compressorNode.threshold.value = this.vocalProcessingEnabled ? -20 : 0;
+      this.compressorNode.ratio.value = this.vocalProcessingEnabled ? 3 : 1;
+      this.compressorNode.attack.value = 0.005;
+      this.compressorNode.release.value = 0.15;
+
+      // Ganho de compensação: a compressão reduz a diferença entre partes
+      // fortes e fracas, então recuperamos volume médio percebido aqui —
+      // sem isso, o sinal comprimido soa mais baixo, não mais "cheio".
+      this.makeupGainNode = this.context.createGain();
+      this.makeupGainNode.gain.value = this.vocalProcessingEnabled ? 2.0 : 1.0;
+
       this.outputGainNode = this.context.createGain();
       this.outputGainNode.gain.value = this.initialOutputGain != null ? this.initialOutputGain : 0.8;
 
+      // Limitador final: sempre ativo, contém qualquer pico súbito (início
+      // de microfonia, plosivas, harmonia somada) antes de chegar à saída.
+      this.limiterNode = this.context.createDynamicsCompressor();
+      this.limiterNode.threshold.value = -3;
+      this.limiterNode.ratio.value = 20;
+      this.limiterNode.attack.value = 0.002;
+      this.limiterNode.release.value = 0.1;
+
       this.sourceNode.connect(this.workletNode);
-      this.workletNode.connect(this.outputGainNode);
-      this.outputGainNode.connect(this.context.destination);
+
+      // Filtros notch dinâmicos, inertes por padrão (frequência fora do
+      // espectro de voz). Quando a detecção por banda estreita confirma
+      // um pico de microfonia, um deles é movido pra frequência exata.
+      this._notchFilters = [];
+      let notchChainInput = this.workletNode;
+      for (let i = 0; i < FEEDBACK_NOTCH_COUNT; i++) {
+        const notch = this.context.createBiquadFilter();
+        notch.type = 'notch';
+        notch.frequency.value = FEEDBACK_NOTCH_INERT_HZ;
+        notch.Q.value = FEEDBACK_NOTCH_Q;
+        notchChainInput.connect(notch);
+        notchChainInput = notch;
+        this._notchFilters.push({ node: notch, active: false, freq: FEEDBACK_NOTCH_INERT_HZ, silentPolls: 0 });
+      }
+
+      // Tap de análise: pega o sinal cru (antes dos notches) pra sempre
+      // enxergar a ressonância real, mesmo quando já está sendo filtrada.
+      // Conectado a um ganho zero até o destino só pra continuar sendo
+      // processado pelo grafo (AnalyserNode "órfão" pode parar de rodar).
+      this.analyserNode = this.context.createAnalyser();
+      this.analyserNode.fftSize = 4096;
+      this.analyserNode.smoothingTimeConstant = 0.2;
+      this.analyserNode.minDecibels = -100;
+      this.analyserNode.maxDecibels = 0;
+      this._analyserData = new Float32Array(this.analyserNode.frequencyBinCount);
+      this.workletNode.connect(this.analyserNode);
+      this._analyserSink = this.context.createGain();
+      this._analyserSink.gain.value = 0;
+      this.analyserNode.connect(this._analyserSink);
+      this._analyserSink.connect(this.context.destination);
+
+      notchChainInput.connect(this.highpassNode);
+      this.highpassNode.connect(this.presenceNode);
+      this.presenceNode.connect(this.compressorNode);
+      this.compressorNode.connect(this.makeupGainNode);
+      this.makeupGainNode.connect(this.outputGainNode);
+      this.outputGainNode.connect(this.limiterNode);
+      this.limiterNode.connect(this.context.destination);
 
       this.harmonyGain = this.context.createGain();
       this.harmonyGain.gain.value = 0;
@@ -673,8 +816,11 @@ class AudioEngine {
       this.harmonyOsc.type = 'sine';
       this.harmonyOsc.frequency.value = 440;
       this.harmonyOsc.connect(this.harmonyGain);
-      this.harmonyGain.connect(this.context.destination);
+      this.harmonyGain.connect(this.limiterNode);
       this.harmonyOsc.start();
+      this._feedbackRmsHistory = [];
+      this._feedbackCandidate = null;
+      this._feedbackPollTimer = setInterval(() => this._pollFeedback(), FEEDBACK_ANALYSIS_INTERVAL_MS);
       this._harmonyAutoLastNote = null;
       this._harmonyAutoHoldStart = 0;
 
@@ -687,18 +833,38 @@ class AudioEngine {
   }
 
   stop() {
+    if (this._feedbackPollTimer) { clearInterval(this._feedbackPollTimer); this._feedbackPollTimer = null; }
     if (this.sourceNode) this.sourceNode.disconnect();
     if (this.workletNode) this.workletNode.disconnect();
+    this._notchFilters.forEach((n) => n.node.disconnect());
+    if (this.analyserNode) this.analyserNode.disconnect();
+    if (this._analyserSink) this._analyserSink.disconnect();
+    if (this.highpassNode) this.highpassNode.disconnect();
+    if (this.presenceNode) this.presenceNode.disconnect();
+    if (this.compressorNode) this.compressorNode.disconnect();
+    if (this.makeupGainNode) this.makeupGainNode.disconnect();
     if (this.outputGainNode) this.outputGainNode.disconnect();
+    if (this.limiterNode) this.limiterNode.disconnect();
     if (this.harmonyOsc) { try { this.harmonyOsc.stop(); } catch (_) {} this.harmonyOsc.disconnect(); }
     if (this.harmonyGain) this.harmonyGain.disconnect();
     if (this.micStream) this.micStream.getTracks().forEach((t) => t.stop());
     this.sourceNode = null;
     this.workletNode = null;
+    this._notchFilters = [];
+    this.analyserNode = null;
+    this._analyserSink = null;
+    this._analyserData = null;
+    this._feedbackCandidate = null;
+    this.highpassNode = null;
+    this.presenceNode = null;
+    this.compressorNode = null;
+    this.makeupGainNode = null;
     this.outputGainNode = null;
+    this.limiterNode = null;
     this.harmonyOsc = null;
     this.harmonyGain = null;
     this.micStream = null;
+    this._feedbackRmsHistory = [];
     this.isListening = false;
     this.onStateChange && this.onStateChange(false);
   }
@@ -748,6 +914,164 @@ class AudioEngine {
     if (!safe && this.harmonyGain && this.context) {
       this.harmonyGain.gain.setTargetAtTime(0, this.context.currentTime, 0.05);
     }
+  }
+
+  // Liga/desliga a cadeia de EQ + compressão do monitoramento sem
+  // reconectar o grafo: só move os parâmetros pra um estado neutro.
+  setVocalProcessing(enabled) {
+    this.vocalProcessingEnabled = enabled;
+    if (!this.context || !this.highpassNode) return;
+    const now = this.context.currentTime;
+    if (enabled) {
+      this.highpassNode.frequency.setTargetAtTime(90, now, 0.05);
+      this.presenceNode.gain.setTargetAtTime(3, now, 0.05);
+      this.compressorNode.threshold.setTargetAtTime(-20, now, 0.05);
+      this.compressorNode.ratio.setTargetAtTime(3, now, 0.05);
+      this.makeupGainNode.gain.setTargetAtTime(2.0, now, 0.05);
+    } else {
+      this.highpassNode.frequency.setTargetAtTime(20, now, 0.05);
+      this.presenceNode.gain.setTargetAtTime(0, now, 0.05);
+      this.compressorNode.threshold.setTargetAtTime(0, now, 0.05);
+      this.compressorNode.ratio.setTargetAtTime(1, now, 0.05);
+      this.makeupGainNode.gain.setTargetAtTime(1.0, now, 0.05);
+    }
+  }
+
+  // Rede de segurança contra microfonia: se o nível de entrada crescer de
+  // forma sustentada (cada leitura mais alta que a anterior) enquanto há
+  // saída de áudio ligada, é o padrão clássico de um loop se formando —
+  // corta a saída antes que vire um guincho audível.
+  // Rede de segurança antiga (olha só o volume total): agora fica como
+  // último recurso, caso a detecção por banda estreita abaixo não dê conta
+  // (ex.: múltiplas frequências ressoando ao mesmo tempo, além dos notches
+  // disponíveis).
+  _checkFeedback(rms) {
+    if (!this.isListening || !this.outputGainNode || this.outputGainNode.gain.value <= 0.001) {
+      this._feedbackRmsHistory.length = 0;
+      return;
+    }
+    const db = rms > 0 ? 20 * Math.log10(rms) : -100;
+    this._feedbackRmsHistory.push(db);
+    if (this._feedbackRmsHistory.length > 5) this._feedbackRmsHistory.shift();
+    if (this._feedbackRmsHistory.length === 5) {
+      let sustainedGrowth = true;
+      for (let i = 1; i < this._feedbackRmsHistory.length; i++) {
+        if (this._feedbackRmsHistory[i] <= this._feedbackRmsHistory[i - 1] + 1) { sustainedGrowth = false; break; }
+      }
+      const last = this._feedbackRmsHistory[this._feedbackRmsHistory.length - 1];
+      if (sustainedGrowth && last > -6) {
+        this.outputGainNode.gain.setTargetAtTime(0, this.context.currentTime, 0.01);
+        this._feedbackRmsHistory.length = 0;
+        this.onFeedbackDetected && this.onFeedbackDetected();
+      }
+    }
+  }
+
+  // Analisa o espectro em busca de um pico estreito e crescente (assinatura
+  // de microfonia) e solta os notches que já pararam de ser necessários.
+  _pollFeedback() {
+    if (!this.analyserNode || !this._analyserData || !this.context) return;
+    this.analyserNode.getFloatFrequencyData(this._analyserData);
+    const binHz = this.context.sampleRate / this.analyserNode.fftSize;
+
+    this._updateNotchRelease(binHz);
+
+    const minBin = Math.max(1, Math.floor(FEEDBACK_FREQ_MIN_HZ / binHz));
+    const maxBin = Math.min(this._analyserData.length - 1, Math.ceil(FEEDBACK_FREQ_MAX_HZ / binHz));
+    let peakBin = -1;
+    let peakMag = -Infinity;
+    let sum = 0;
+    let count = 0;
+    for (let i = minBin; i <= maxBin; i++) {
+      const mag = this._analyserData[i];
+      sum += mag;
+      count++;
+      if (mag > peakMag) { peakMag = mag; peakBin = i; }
+    }
+    if (peakBin === -1 || count === 0) return;
+    const avgMag = sum / count;
+    const peakiness = peakMag - avgMag;
+    const peakFreq = peakBin * binHz;
+
+    if (peakiness >= FEEDBACK_PEAKINESS_DB && peakMag >= FEEDBACK_ABS_THRESHOLD_DB) {
+      this._trackFeedbackCandidate(peakFreq, peakMag, binHz);
+    } else {
+      this._feedbackCandidate = null;
+    }
+  }
+
+  // Só confirma um candidato a microfonia se a mesma frequência (com
+  // pequena tolerância de deriva) aparecer crescendo em leituras seguidas —
+  // isso separa um transiente qualquer (uma nota cantada, uma batida) de um
+  // loop de realimentação de verdade, que cresce de forma sustentada.
+  _trackFeedbackCandidate(freq, mag, binHz) {
+    const driftTolerance = binHz * 3;
+    if (this._feedbackCandidate && Math.abs(this._feedbackCandidate.freq - freq) <= driftTolerance) {
+      this._feedbackCandidate.freq = freq;
+      this._feedbackCandidate.history.push(mag);
+      if (this._feedbackCandidate.history.length > FEEDBACK_HISTORY_LEN) {
+        this._feedbackCandidate.history.shift();
+      }
+    } else {
+      this._feedbackCandidate = { freq, history: [mag] };
+    }
+
+    const hist = this._feedbackCandidate.history;
+    if (hist.length === FEEDBACK_HISTORY_LEN) {
+      let growing = true;
+      for (let i = 1; i < hist.length; i++) {
+        if (hist[i] <= hist[i - 1] + FEEDBACK_GROWTH_STEP_DB) { growing = false; break; }
+      }
+      if (growing) {
+        this._engageNotch(this._feedbackCandidate.freq);
+        this._feedbackCandidate = null;
+      }
+    }
+  }
+
+  // Move um filtro notch (existente perto dessa frequência, um livre, ou o
+  // mais antigo em uso) pra frequência confirmada como microfonia.
+  _engageNotch(freq) {
+    if (!this.context || this._notchFilters.length === 0) return;
+    let slot = this._notchFilters.find((n) => n.active && Math.abs(n.freq - freq) < 40);
+    if (!slot) slot = this._notchFilters.find((n) => !n.active);
+    if (!slot) {
+      slot = this._notchFilters.reduce((oldest, n) => (n.silentPolls <= oldest.silentPolls ? n : oldest), this._notchFilters[0]);
+    }
+    const now = this.context.currentTime;
+    slot.active = true;
+    slot.freq = freq;
+    slot.silentPolls = 0;
+    slot.node.frequency.setTargetAtTime(freq, now, 0.01);
+    slot.node.Q.setTargetAtTime(FEEDBACK_NOTCH_Q, now, 0.05);
+    this.onFeedbackNotchEngaged && this.onFeedbackNotchEngaged(freq);
+  }
+
+  // Solta os notches ativos cuja frequência já não mostra mais energia
+  // alta por várias leituras seguidas — o loop foi quebrado, não precisa
+  // mais filtrar ali.
+  _updateNotchRelease(binHz) {
+    if (!this._analyserData) return;
+    let anyStillActive = false;
+    for (const slot of this._notchFilters) {
+      if (!slot.active) continue;
+      const bin = Math.round(slot.freq / binHz);
+      const mag = this._analyserData[bin] != null ? this._analyserData[bin] : -100;
+      if (mag < FEEDBACK_RELEASE_THRESHOLD_DB) {
+        slot.silentPolls++;
+      } else {
+        slot.silentPolls = 0;
+      }
+      if (slot.silentPolls >= FEEDBACK_RELEASE_POLLS) {
+        slot.active = false;
+        slot.silentPolls = 0;
+        const now = this.context.currentTime;
+        slot.node.frequency.setTargetAtTime(FEEDBACK_NOTCH_INERT_HZ, now, 0.3);
+      } else {
+        anyStillActive = true;
+      }
+    }
+    if (!anyStillActive) this.onFeedbackNotchReleased && this.onFeedbackNotchReleased();
   }
 
   _updateHarmony(data) {
@@ -812,6 +1136,7 @@ const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const errorBanner = document.getElementById('errorBanner');
 const infoBanner = document.getElementById('infoBanner');
+const notchBanner = document.getElementById('notchBanner');
 const vuNeedle = document.getElementById('vuNeedle');
 const pitchNote = document.getElementById('pitchNote');
 const pitchStatus = document.getElementById('pitchStatus');
@@ -830,6 +1155,9 @@ const harmonyDrawerToggle = document.getElementById('harmonyDrawerToggle');
 const harmonyDrawer = document.getElementById('harmonyDrawer');
 const outputRouteSelect = document.getElementById('outputRouteSelect');
 const outputRouteHint = document.getElementById('outputRouteHint');
+const processingOffBtn = document.getElementById('processingOffBtn');
+const processingOnBtn = document.getElementById('processingOnBtn');
+const processingHint = document.getElementById('processingHint');
 
 harmonyDrawerToggle.addEventListener('click', () => {
   const isOpen = harmonyDrawer.classList.toggle('open');
@@ -846,19 +1174,41 @@ const guitarStringsContainer = document.getElementById('guitarStrings');
 const guitarHint = document.getElementById('guitarHint');
 
 // ---- Proteção contra microfonia ----
-// A saída pode ser: fone (não realimenta o mic, sem risco), caixa Bluetooth
-// (realimenta o mic no ar, precisa de cancelamento de eco + volume limitado)
-// ou desconhecida (trata como caixa por segurança). "outputRouteMode"
-// guarda a escolha da pessoa: 'auto' | 'headphone' | 'bluetooth-speaker'.
+// A saída pode ser: fone (não realimenta o mic, sem risco), alto-falante do
+// celular, caixa com fio ou caixa Bluetooth (as três últimas realimentam o
+// mic pelo ar, precisam de cancelamento de eco + volume limitado — o
+// celular com teto mais baixo por estar fisicamente mais perto do mic) ou
+// desconhecida (trata como caixa por segurança). "outputRouteMode" guarda
+// a escolha da pessoa: 'auto' | 'headphone' | 'phone-speaker' |
+// 'wired-speaker' | 'bluetooth-speaker'.
 const HEADPHONE_KEYWORDS = ['fone', 'headphone', 'headset', 'earbud', 'earphone', 'airpod', 'fones de ouvido', 'headfone'];
 let lastOutputLooksLikeHeadphone = null; // true | false | null (desconhecido, via nome do dispositivo)
 let outputRouteMode = 'auto'; // escolha manual da pessoa no seletor
 
-// Volume de saída máximo permitido quando a saída é caixa Bluetooth, mesmo
-// com o cancelamento de eco ligado — o AEC reduz bastante o risco de
-// microfonia mas não é garantia total, então mantemos uma margem de
-// segurança em vez de liberar 100%.
-const BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT = 55;
+// Tetos de volume por rota de saída. Antes eram a única proteção contra
+// microfonia; agora que existe detecção automática de microfonia em tempo
+// real (_checkFeedback + notch dinâmico), eles servem como uma segunda
+// camada — por isso podem ser menos conservadores do que seriam sozinhos.
+//
+// Caixa Bluetooth NÃO tem mais teto rígido: a pessoa pode usar o volume
+// que quiser. Em troca, a detecção de microfonia (_pollFeedback) roda mais
+// rápido (70ms por leitura, 3 leituras pra confirmar — ~210ms) e o corte
+// de emergência total continua ativo como último recurso. Acima do valor
+// de aviso abaixo, só mostramos um alerta visual, sem bloquear nada.
+const BLUETOOTH_SPEAKER_WARN_THRESHOLD_PERCENT = 70;
+const PHONE_SPEAKER_MAX_GAIN_PERCENT = 45;
+
+// Caixa com fio (P2/USB-C): o loop acústico som->ar->microfone é o mesmo
+// de qualquer caixa externa, independente do meio de transmissão — então
+// usamos o mesmo teto de segurança da caixa Bluetooth. A vantagem aqui é
+// a latência quase nula, sem o atraso de codec do Bluetooth.
+const WIRED_SPEAKER_MAX_GAIN_PERCENT = 65;
+
+// Volume inicial sugerido ao escolher cada rota, pra pessoa não precisar
+// subir o slider manualmente a partir de 0% pra ouvir alguma coisa.
+const BLUETOOTH_SPEAKER_DEFAULT_GAIN_PERCENT = 45;
+const PHONE_SPEAKER_DEFAULT_GAIN_PERCENT = 35;
+const WIRED_SPEAKER_DEFAULT_GAIN_PERCENT = 45;
 
 function looksLikeHeadphone(label) {
   if (!label) return null;
@@ -867,16 +1217,35 @@ function looksLikeHeadphone(label) {
 }
 
 function showFeedbackWarning() {
-  errorBanner.innerHTML = '🔇 Saída silenciada automaticamente: a saída não parece ser um fone, o que pode causar microfonia. Use fone de ouvido, ou selecione "Caixa Bluetooth" abaixo para liberar o volume com cancelamento de eco.';
+  errorBanner.innerHTML = '🔇 Saída silenciada automaticamente: a saída não parece ser um fone, o que pode causar microfonia. Use fone de ouvido, ou selecione "Alto-falante do celular", "Caixa com fio" ou "Caixa Bluetooth" abaixo para liberar o volume com cancelamento de eco.';
   errorBanner.classList.add('visible');
 }
 
-function showSpeakerInfo() {
-  infoBanner.innerHTML = `🎧 Modo caixa Bluetooth ativo: cancelamento de eco ligado e volume de saída limitado a ${BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT}%. Mesmo assim, mantenha a caixa a uma distância razoável do celular e evite volume muito alto.`;
+function showSpeakerInfo(mode) {
+  if (mode === 'phone-speaker') {
+    infoBanner.innerHTML = `📱 Modo alto-falante do celular ativo: cancelamento de eco ligado e volume de saída limitado a ${PHONE_SPEAKER_MAX_GAIN_PERCENT}%. Mesmo assim, evite aproximar o microfone do alto-falante e use volume moderado.`;
+  } else if (mode === 'wired-speaker') {
+    infoBanner.innerHTML = `🔌 Modo caixa com fio ativo: cancelamento de eco ligado e volume de saída limitado a ${WIRED_SPEAKER_MAX_GAIN_PERCENT}%. A latência aqui é bem menor que via Bluetooth, mas o risco de microfonia é o mesmo — evite volume muito alto perto do microfone.`;
+  } else {
+    infoBanner.innerHTML = `🎧 Modo caixa Bluetooth ativo: cancelamento de eco ligado, sem teto de volume — a proteção contra microfonia agora é toda em tempo real (filtro notch automático + corte de emergência). Acima de ${BLUETOOTH_SPEAKER_WARN_THRESHOLD_PERCENT}% o risco de um pico audível antes da correção automática aumenta.`;
+  }
   infoBanner.classList.add('visible');
 }
 
 function clearInfo() { infoBanner.classList.remove('visible'); }
+
+// Aviso visual (não bloqueia nada) quando o volume na caixa Bluetooth
+// passa do limite recomendado — a proteção real é a detecção em tempo
+// real, isso aqui é só um alerta de "ei, presta atenção".
+function updateVolumeWarning(percent) {
+  if (outputRouteMode === 'bluetooth-speaker' && percent > BLUETOOTH_SPEAKER_WARN_THRESHOLD_PERCENT) {
+    outputRouteHint.textContent = `⚠️ ${percent}% é bem alto para caixa Bluetooth — a proteção automática ainda funciona, mas um pico inicial pode ser audível antes dela agir.`;
+    outputRouteHint.style.color = '#d97706';
+  } else if (outputRouteMode === 'bluetooth-speaker') {
+    outputRouteHint.textContent = 'Cancelamento de eco ligado, sem teto de volume — proteção automática em tempo real ativa.';
+    outputRouteHint.style.color = '';
+  }
+}
 
 // ---- Modo Afinador de Violão ----
 const GUITAR_STRINGS = [
@@ -1129,9 +1498,40 @@ engine.onStateChange = (isListening) => {
   } else {
     clearInterval(latencyInterval);
     updateVuNeedle(0);
+    notchBanner.classList.remove('visible');
     if (currentMode === 'guitar') updateGuitarDisplay({ note: null });
     else updatePitchDisplay({ note: null });
   }
+};
+
+function setProcessingUiMode(enabled) {
+  processingOffBtn.classList.toggle('active', !enabled);
+  processingOnBtn.classList.toggle('active', enabled);
+  engine.setVocalProcessing(enabled);
+  processingHint.textContent = enabled
+    ? 'On — corta ronco grave, realça clareza e equilibra o volume da voz.'
+    : 'Off — sinal passa sem coloração, só com o ganho de entrada.';
+}
+processingOffBtn.addEventListener('click', () => setProcessingUiMode(false));
+processingOnBtn.addEventListener('click', () => setProcessingUiMode(true));
+setProcessingUiMode(true);
+
+engine.onFeedbackDetected = () => {
+  outputGainSlider.value = 0;
+  outputGainValue.textContent = '0%';
+  showError('🔇 Microfonia detectada — saída desligada automaticamente por segurança. Reduza o volume e tente novamente com calma.');
+};
+
+let notchBannerTimeout = null;
+engine.onFeedbackNotchEngaged = (freq) => {
+  clearTimeout(notchBannerTimeout);
+  notchBanner.innerHTML = `🎯 Ressonância detectada em ~${Math.round(freq)}Hz — filtro aplicado só nessa frequência, o resto do som continua normal.`;
+  notchBanner.classList.add('visible');
+  notchBannerTimeout = setTimeout(() => notchBanner.classList.remove('visible'), 4000);
+};
+engine.onFeedbackNotchReleased = () => {
+  clearTimeout(notchBannerTimeout);
+  notchBanner.classList.remove('visible');
 };
 
 engine.onError = (err) => {
@@ -1163,14 +1563,18 @@ inputGainSlider.addEventListener('input', (e) => {
 
 outputGainSlider.addEventListener('input', (e) => {
   let percent = Number(e.target.value);
-  // No modo caixa Bluetooth, respeita o teto de segurança mesmo que a
-  // pessoa arraste o slider além dele.
-  if (outputRouteMode === 'bluetooth-speaker' && percent > BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT) {
-    percent = BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT;
+  // Caixa Bluetooth não tem mais teto rígido (ver updateVolumeWarning).
+  // Celular e caixa com fio continuam com teto físico, por segurança.
+  const gainCap = outputRouteMode === 'phone-speaker' ? PHONE_SPEAKER_MAX_GAIN_PERCENT
+    : outputRouteMode === 'wired-speaker' ? WIRED_SPEAKER_MAX_GAIN_PERCENT
+    : null;
+  if (gainCap !== null && percent > gainCap) {
+    percent = gainCap;
     outputGainSlider.value = percent;
   }
   outputGainValue.textContent = `${percent}%`;
   engine.setOutputGain(percent / 100);
+  updateVolumeWarning(percent);
   if (percent > 0 && errorBanner.textContent.includes('microfonia')) clearError();
 });
 
@@ -1207,21 +1611,66 @@ function applyFeedbackSafety() {
 
   if (outputRouteMode === 'bluetooth-speaker') {
     // Caixa Bluetooth confirmada: liga cancelamento de eco nativo do
-    // navegador (é ele que sabe cancelar o loop caixa->microfone) e limita
-    // o volume máximo por segurança, em vez de bloquear tudo.
+    // navegador. Sem teto rígido de volume — a proteção agora é ativa em
+    // tempo real (notch dinâmico + corte de emergência), não um limite
+    // fixo no slider. O slider vai até 100%.
     engine.setMicEchoCancellation(true);
     engine.setHarmonySafeToPlay(true);
     harmonyOnBtn.disabled = false;
     harmonyAutoBtn.disabled = false;
-    const currentGain = Number(outputGainSlider.value);
-    if (currentGain > BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT) {
-      outputGainSlider.value = BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT;
-      outputGainValue.textContent = `${BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT}%`;
-      engine.setOutputGain(BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT / 100);
-    }
+    outputGainSlider.removeAttribute('max');
+    let currentGain = Number(outputGainSlider.value);
+    if (currentGain === 0) currentGain = BLUETOOTH_SPEAKER_DEFAULT_GAIN_PERCENT;
+    outputGainSlider.value = currentGain;
+    outputGainValue.textContent = `${currentGain}%`;
+    engine.setOutputGain(currentGain / 100);
     updateHarmonyHint();
     clearError();
-    showSpeakerInfo();
+    updateVolumeWarning(currentGain);
+    showSpeakerInfo('bluetooth-speaker');
+    return;
+  }
+
+  if (outputRouteMode === 'phone-speaker') {
+    // Alto-falante do próprio celular: mesma lógica da caixa Bluetooth
+    // (AEC ligado), mas com um teto de volume mais baixo, porque a
+    // distância física até o microfone é bem menor.
+    engine.setMicEchoCancellation(true);
+    engine.setHarmonySafeToPlay(true);
+    harmonyOnBtn.disabled = false;
+    harmonyAutoBtn.disabled = false;
+    outputGainSlider.setAttribute('max', String(PHONE_SPEAKER_MAX_GAIN_PERCENT));
+    let currentGain = Number(outputGainSlider.value);
+    if (currentGain === 0) currentGain = PHONE_SPEAKER_DEFAULT_GAIN_PERCENT;
+    if (currentGain > PHONE_SPEAKER_MAX_GAIN_PERCENT) currentGain = PHONE_SPEAKER_MAX_GAIN_PERCENT;
+    outputGainSlider.value = currentGain;
+    outputGainValue.textContent = `${currentGain}%`;
+    engine.setOutputGain(currentGain / 100);
+    updateHarmonyHint();
+    clearError();
+    showSpeakerInfo('phone-speaker');
+    return;
+  }
+
+  if (outputRouteMode === 'wired-speaker') {
+    // Caixa ligada por cabo (P2/USB-C): mesmo risco acústico de qualquer
+    // caixa externa, mas sem a latência de codec do Bluetooth — o AEC
+    // funciona igual, pois o navegador reconhece a saída com fio como
+    // qualquer outro dispositivo de áudio do sistema.
+    engine.setMicEchoCancellation(true);
+    engine.setHarmonySafeToPlay(true);
+    harmonyOnBtn.disabled = false;
+    harmonyAutoBtn.disabled = false;
+    outputGainSlider.setAttribute('max', String(WIRED_SPEAKER_MAX_GAIN_PERCENT));
+    let currentGain = Number(outputGainSlider.value);
+    if (currentGain === 0) currentGain = WIRED_SPEAKER_DEFAULT_GAIN_PERCENT;
+    if (currentGain > WIRED_SPEAKER_MAX_GAIN_PERCENT) currentGain = WIRED_SPEAKER_MAX_GAIN_PERCENT;
+    outputGainSlider.value = currentGain;
+    outputGainValue.textContent = `${currentGain}%`;
+    engine.setOutputGain(currentGain / 100);
+    updateHarmonyHint();
+    clearError();
+    showSpeakerInfo('wired-speaker');
     return;
   }
 
@@ -1254,16 +1703,25 @@ function applyFeedbackSafety() {
 
 outputRouteSelect.addEventListener('change', (e) => {
   outputRouteMode = e.target.value;
+  outputRouteHint.style.color = '';
   if (outputRouteMode === 'headphone') {
     outputRouteHint.textContent = 'Fone confirmado — volume e 2ª voz liberados normalmente.';
   } else if (outputRouteMode === 'bluetooth-speaker') {
-    outputRouteHint.textContent = `Cancelamento de eco ligado, volume limitado a ${BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT}%.`;
-    outputGainSlider.setAttribute('max', String(BLUETOOTH_SPEAKER_MAX_GAIN_PERCENT));
+    outputRouteHint.textContent = 'Cancelamento de eco ligado, sem teto de volume — proteção automática em tempo real ativa.';
+    outputGainSlider.removeAttribute('max');
+  } else if (outputRouteMode === 'phone-speaker') {
+    outputRouteHint.textContent = `Cancelamento de eco ligado, volume limitado a ${PHONE_SPEAKER_MAX_GAIN_PERCENT}%.`;
+    outputGainSlider.setAttribute('max', String(PHONE_SPEAKER_MAX_GAIN_PERCENT));
+  } else if (outputRouteMode === 'wired-speaker') {
+    outputRouteHint.textContent = `Cancelamento de eco ligado, volume limitado a ${WIRED_SPEAKER_MAX_GAIN_PERCENT}% (latência mínima via cabo).`;
+    outputGainSlider.setAttribute('max', String(WIRED_SPEAKER_MAX_GAIN_PERCENT));
   } else {
     outputRouteHint.textContent = 'Detecção automática ativa.';
     outputGainSlider.removeAttribute('max');
   }
-  if (outputRouteMode !== 'bluetooth-speaker') outputGainSlider.removeAttribute('max');
+  if (outputRouteMode !== 'phone-speaker' && outputRouteMode !== 'wired-speaker') {
+    outputGainSlider.removeAttribute('max');
+  }
   applyFeedbackSafety();
 });
 
