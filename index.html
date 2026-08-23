@@ -1,0 +1,2763 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="LB Voice Pro — afinador, processamento vocal, harmonia e bases por estilo num único painel, feito pra prática e ensaio." />
+<meta name="theme-color" content="#0f0e0c" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23161513'/%3E%3Crect y='0' width='64' height='4' fill='%23ff6a3d'/%3E%3Ctext x='32' y='42' font-family='monospace' font-size='24' fill='%2346e08a' text-anchor='middle'%3ELB%3C/text%3E%3C/svg%3E" />
+<title>LB Voice Pro</title>
+<style>
+/* ============================================================================
+   LB VOICE PRO — folha de estilos
+   ----------------------------------------------------------------------------
+   1. Fontes & tokens de design (:root)               → cores, fontes, raios
+   2. Chassi do app (.unit) & marca (.brand)
+   3. Tela LCD de afinação (.pitch-panel, .cents-*)
+   4. Controles genéricos (sliders, selects, gavetas)
+   5. Botão "Ao vivo" & VU meter
+   6. Painéis modulares (.guitar-panel): saída, harmonia, bases, gerador,
+      repertório
+   7. Rodapé & responsividade
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Share+Tech+Mono&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ---- 1. Tokens de design ------------------------------------------------ */
+:root {
+  --bg-vignette: radial-gradient(ellipse at 50% -10%, #201f1d 0%, #0a0a09 60%);
+  --panel: #1a1815;
+  --panel-raised: #1f1c18;
+  --panel-border: #2c2822;
+  --brass: #ff6a3d;
+  --brass-glow: rgba(255, 106, 61, 0.4);
+  --sage: #4fd66a;
+  --danger: #ff3b30;
+  --cream: #f2f0ea;
+  --muted: #9a988f;
+  --muted-dim: #5c5951;
+  --lcd-bg: #0c1410;
+  --lcd-fg: #46e08a;
+  --lcd-fg-dim: #1f4a35;
+  --lcd-glow: rgba(70, 224, 138, 0.55);
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-lcd: 'Share Tech Mono', monospace;
+  --radius-panel: 20px;
+  --radius-control: 12px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg-vignette);
+  color: var(--cream);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 32px 16px 64px;
+  -webkit-font-smoothing: antialiased;
+}
+.unit {
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(180deg, #211e1a 0%, #17150f 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 30px 70px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.03);
+  padding: 4px 22px 24px;
+  position: relative;
+  overflow: hidden;
+  animation: unit-power-on 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.unit::before {
+  content: ''; display: block; height: 4px; margin: 0 -22px 26px;
+  background: linear-gradient(90deg, var(--brass), #ffb37a 50%, var(--brass));
+  box-shadow: 0 0 12px var(--brass-glow);
+}
+@keyframes unit-power-on {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .unit { animation: none; }
+}
+.brand { text-align: center; margin-bottom: 20px; }
+.brand-badge {
+  width: 40px; height: 40px; margin: 0 auto 10px; border-radius: 11px;
+  background: linear-gradient(165deg, #1c1a17, #0c0b09);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 14px rgba(70,224,138,0.25);
+  display: flex; align-items: center; justify-content: center;
+}
+.brand-badge span {
+  font-family: var(--font-lcd); font-weight: 400; font-size: 15px; letter-spacing: 0.02em;
+  color: var(--lcd-fg); text-shadow: 0 0 8px var(--lcd-glow);
+}
+.brand h1 {
+  font-family: var(--font-display); font-weight: 800; font-size: 30px;
+  letter-spacing: 0.02em; margin: 0; color: var(--cream); text-transform: uppercase;
+  text-shadow: 0 2px 2px rgba(0,0,0,0.35);
+}
+.brand .slogan {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.75); margin-top: 6px;
+}
+.phase-note {
+  font-family: var(--font-mono); font-size: 10.5px; color: rgba(255,255,255,0.55);
+  text-align: center; margin: -10px 0 20px; letter-spacing: 0.02em;
+}
+.mode-toggle {
+  display: flex; gap: 8px; margin-bottom: 18px; background: var(--panel-raised);
+  border: 1px solid var(--panel-border); border-radius: var(--radius-control); padding: 4px;
+}
+.mode-btn {
+  flex: 1; padding: 10px 8px; border-radius: 7px; border: none; background: transparent;
+  color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; cursor: pointer; transition: all 150ms ease;
+}
+.mode-btn.active {
+  background: rgba(255,106,61,0.14); color: var(--brass);
+  box-shadow: inset 0 0 0 1px rgba(255,106,61,0.35);
+}
+.mode-btn:active:not(:disabled) { transform: scale(0.96); }
+.mode-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pitch-panel {
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0px, rgba(0,0,0,0.18) 1px, transparent 1px, transparent 3px),
+    radial-gradient(ellipse at 50% 0%, #16241c 0%, var(--lcd-bg) 70%);
+  border: 1px solid #000; border-radius: 4px;
+  padding: 20px 16px 16px; margin-bottom: 20px;
+  text-align: center; position: relative;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.85), inset 0 0 24px rgba(0,0,0,0.5), 0 0 0 6px #050504, 0 0 0 7px #000, 0 1px 0 rgba(255,255,255,0.05);
+}
+.pitch-note {
+  font-family: var(--font-lcd); font-size: 46px; font-weight: 400;
+  color: var(--lcd-fg-dim); line-height: 1; transition: color 150ms ease, text-shadow 150ms ease;
+  letter-spacing: 0.02em;
+}
+.pitch-note.detected { color: var(--lcd-fg); text-shadow: 0 0 10px var(--lcd-glow), 0 0 22px var(--lcd-glow); }
+.pitch-note.in-tune { color: #b6ffce; text-shadow: 0 0 10px var(--lcd-glow), 0 0 26px var(--lcd-glow); }
+@keyframes note-flicker {
+  0% { opacity: 0.3; }
+  40% { opacity: 1; }
+  100% { opacity: 1; }
+}
+.pitch-note.flicker { animation: note-flicker 140ms ease-out; }
+.string-row { transition: transform 100ms ease, background 150ms ease; }
+.string-row:active { transform: scale(0.985); }
+.pitch-status {
+  font-family: var(--font-lcd); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--lcd-fg-dim); margin-top: 4px; min-height: 14px;
+}
+.cents-track {
+  position: relative; height: 8px; border-radius: 2px; background: rgba(0,0,0,0.55);
+  margin: 18px 4px 6px; display: flex; gap: 2px; padding: 0;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.7);
+}
+.cents-track::before {
+  content: ''; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 1px;
+  background: var(--lcd-fg-dim);
+}
+.cents-fill {
+  position: absolute; top: 0; height: 100%; width: 4px; border-radius: 2px;
+  background: var(--lcd-fg); left: 50%; transform: translateX(-50%);
+  box-shadow: 0 0 8px var(--lcd-glow); transition: left 90ms ease-out, background 150ms ease;
+}
+.cents-labels {
+  display: flex; justify-content: space-between; font-family: var(--font-lcd);
+  font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--lcd-fg-dim);
+}
+.vu-panel {
+  background: var(--panel-raised); border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control); padding: 16px 16px 10px; margin-bottom: 20px;
+}
+.guitar-panel {
+  background: var(--panel-raised); border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control); padding: 14px 14px 8px; margin-bottom: 20px;
+}
+.string-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 8px; border-radius: 8px; margin-bottom: 6px; background: transparent;
+  border: 1px solid transparent; transition: all 150ms ease;
+}
+.string-row.active {
+  background: rgba(201,162,39,0.08); border-color: var(--brass-glow);
+  box-shadow: inset 0 0 0 1px rgba(201,162,39,0.15);
+}
+.string-row.active.in-tune { background: rgba(127,163,122,0.1); border-color: rgba(127,163,122,0.4); }
+.string-id {
+  font-family: var(--font-display); font-weight: 600; font-size: 17px; color: var(--muted-dim);
+  width: 30px; flex-shrink: 0;
+}
+.string-row.active .string-id { color: var(--brass); }
+.string-row.active.in-tune .string-id { color: var(--sage); }
+.string-meta { flex: 1; min-width: 0; }
+.string-label {
+  font-family: var(--font-body); font-size: 12.5px; color: var(--cream); line-height: 1.3;
+}
+.string-target {
+  font-family: var(--font-mono); font-size: 9.5px; color: var(--muted-dim); letter-spacing: 0.04em;
+}
+.string-status {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.03em; color: var(--muted);
+  text-align: right; white-space: nowrap; min-width: 92px;
+}
+.string-row.active .string-status { color: var(--brass); }
+.string-row.active.in-tune .string-status { color: var(--sage); }
+.string-hint {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted-dim); text-align: center;
+  letter-spacing: 0.02em; margin-top: 4px; min-height: 14px;
+}
+.harmony-select {
+  width: 100%; background: var(--panel-raised); color: var(--cream); border: 1px solid var(--panel-border);
+  border-radius: 7px; padding: 9px 10px; font-family: var(--font-body); font-size: 13px;
+  appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--brass) 50%), linear-gradient(135deg, var(--brass) 50%, transparent 50%);
+  background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.harmony-select:focus { outline: none; border-color: var(--brass-glow); }
+.drawer-toggle {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  background: transparent; border: none; border-top: 1px solid var(--panel-border);
+  color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; padding: 10px 2px 8px; cursor: pointer; transition: opacity 120ms ease;
+}
+.drawer-toggle:active { opacity: 0.65; }
+.action-btn {
+  border-top: none !important; justify-content: center; border-radius: 8px; padding: 10px;
+  font-weight: 500;
+}
+.action-btn.accent-green { background: rgba(70,224,138,0.12); color: var(--lcd-fg); }
+.action-btn.accent-orange { background: rgba(255,106,61,0.1); color: var(--brass); }
+.action-btn.neutral { background: rgba(255,255,255,0.04); color: var(--muted); padding: 8px; font-size: 11px; }
+.drawer-chevron { transition: transform 200ms ease; color: var(--muted-dim); }
+.drawer-toggle[aria-expanded="true"] .drawer-chevron { transform: rotate(180deg); }
+.drawer {
+  display: grid; grid-template-rows: 0fr; transition: grid-template-rows 220ms ease;
+}
+.drawer.open { grid-template-rows: 1fr; }
+.drawer-inner { overflow: hidden; padding-top: 4px; }
+.vu-label {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 4px;
+}
+.vu-svg { width: 100%; height: auto; display: block; }
+.vu-dial-face { fill: url(#vuDialGradient); }
+.vu-tick { stroke: var(--muted-dim); stroke-width: 1; }
+.vu-tick.accent { stroke: var(--lcd-fg); stroke-width: 1.4; }
+.vu-needle { transform-origin: 100px 92px; transition: transform 90ms ease-out; filter: drop-shadow(0 0 4px var(--lcd-glow)); }
+.vu-scale-text { font-family: var(--font-mono); fill: var(--muted-dim); font-size: 8px; }
+.status-row {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-bottom: 18px; font-family: var(--font-mono); font-size: 12px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-dim); transition: background 200ms, box-shadow 200ms; }
+.status-dot.live { background: var(--sage); box-shadow: 0 0 8px rgba(127,163,122,0.7); }
+.live-button {
+  width: 92px; height: 92px; margin: 4px auto 22px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: none; background: var(--panel-raised);
+  color: var(--muted); font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 150ms ease;
+  box-shadow: inset 0 0 0 2px var(--panel-border), 0 6px 16px rgba(0,0,0,0.4);
+}
+.live-button:active { transform: scale(0.97); }
+.live-button.active {
+  background: radial-gradient(circle at 35% 30%, #ff8259, var(--brass) 70%);
+  color: #1a0d06; box-shadow: 0 0 0 2px var(--brass), 0 0 26px var(--brass-glow), 0 10px 22px rgba(0,0,0,0.5);
+  animation: live-breathe 2.4s ease-in-out infinite;
+}
+@keyframes live-breathe {
+  0%, 100% { box-shadow: 0 0 0 2px var(--brass), 0 0 20px var(--brass-glow), 0 10px 22px rgba(0,0,0,0.5); }
+  50% { box-shadow: 0 0 0 2px var(--brass), 0 0 34px var(--brass-glow), 0 10px 22px rgba(0,0,0,0.5); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-button.active { animation: none; }
+}
+.control { margin-bottom: 18px; }
+.control-label {
+  display: flex; justify-content: space-between; font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+.control-label span.value { color: var(--brass); font-weight: 600; }
+input[type="range"] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--panel-border); outline: none; }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--brass); border: 2px solid #17140f; box-shadow: 0 0 6px var(--brass-glow); cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--brass); border: 2px solid #17140f; cursor: pointer; }
+.footer-row {
+  display: flex; justify-content: space-between; align-items: center; padding-top: 16px;
+  border-top: 1px solid var(--panel-border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+}
+.latency-tag { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.latency-tag.low { background: var(--sage); }
+.latency-tag.mid { background: var(--brass); }
+.latency-tag.high { background: var(--danger); }
+.error-banner {
+  display: none; background: rgba(193,84,61,0.12); border: 1px solid rgba(193,84,61,0.4);
+  color: #e0a695; border-radius: var(--radius-control); padding: 12px 14px; font-size: 12.5px;
+  line-height: 1.5; margin-bottom: 18px;
+}
+.error-banner.visible { display: block; }
+.info-banner {
+  display: none; background: rgba(127,163,122,0.1); border: 1px solid rgba(127,163,122,0.4);
+  color: #bcd8b8; border-radius: var(--radius-control); padding: 12px 14px; font-size: 12.5px;
+  line-height: 1.5; margin-bottom: 18px;
+}
+.info-banner.visible { display: block; }
+.mode-btn:focus-visible, .live-button:focus-visible, .harmony-select:focus-visible,
+input[type="range"]:focus-visible, .drawer-toggle:focus-visible {
+  outline: 2px solid var(--brass); outline-offset: 2px;
+}
+.output-route-select {
+  width: 100%; background: var(--panel-raised); color: var(--cream); border: 1px solid var(--panel-border);
+  border-radius: 7px; padding: 9px 10px; font-family: var(--font-mono); font-size: 12px;
+  letter-spacing: 0.02em; appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--brass) 50%), linear-gradient(135deg, var(--brass) 50%, transparent 50%);
+  background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; margin-bottom: 10px;
+}
+.output-route-select:focus { outline: none; border-color: var(--brass-glow); }
+.serial-plate {
+  text-align: center; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em;
+  color: var(--muted-dim); margin-top: 18px; text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+  <main class="unit">
+
+    <div class="brand">
+      <div class="brand-badge"><span>LB</span></div>
+      <h1>LB Voice Pro</h1>
+      <div class="slogan">Afinação, harmonia e repertório num só lugar.</div>
+    </div>
+
+    <div class="phase-note">Detecção de afinação em tempo real</div>
+
+    <div class="error-banner" id="errorBanner"></div>
+    <div class="info-banner" id="infoBanner"></div>
+    <div class="info-banner" id="notchBanner"></div>
+
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="modeVoiceBtn" type="button">🎤 Voz</button>
+      <button class="mode-btn" id="modeGuitarBtn" type="button">🎸 Afinador de violão</button>
+    </div>
+
+    <div class="pitch-panel">
+      <div class="pitch-note" id="pitchNote">—</div>
+      <div class="pitch-status" id="pitchStatus">Aguardando sinal</div>
+      <div class="cents-track">
+        <div class="cents-fill" id="centsFill"></div>
+      </div>
+      <div class="cents-labels">
+        <span>Grave</span>
+        <span>Agudo</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06);">
+        <span style="font-family: var(--font-lcd); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--lcd-fg-dim);">Precisão da sessão</span>
+        <span id="accuracyBadge" style="font-family: var(--font-lcd); font-size: 16px; color: var(--lcd-fg-dim);">—</span>
+      </div>
+    </div>
+
+    <div class="guitar-panel" id="guitarPanel" style="display:none;">
+      <div class="vu-label">Cordas — afinação padrão (E A D G B E)</div>
+      <div id="guitarStrings"></div>
+      <div class="string-hint" id="guitarHint">Toque uma corda por vez, deixe soar e aguarde a detecção.</div>
+    </div>
+
+    <div class="vu-panel">
+      <div class="vu-label">Nível de entrada</div>
+      <svg class="vu-svg" viewBox="0 0 200 100">
+        <defs>
+          <radialGradient id="vuDialGradient" cx="50%" cy="95%" r="90%">
+            <stop offset="0%" stop-color="#332c20" />
+            <stop offset="75%" stop-color="#211d17" />
+            <stop offset="100%" stop-color="#17140f" />
+          </radialGradient>
+          <linearGradient id="vuGlass" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="rgba(255,255,255,0.07)" />
+            <stop offset="55%" stop-color="rgba(255,255,255,0)" />
+          </linearGradient>
+          <clipPath id="vuDialClip">
+            <path d="M 8 96 A 92 92 0 0 1 192 96 L 192 100 L 8 100 Z" />
+          </clipPath>
+        </defs>
+        <path class="vu-dial-face" d="M 8 96 A 92 92 0 0 1 192 96 L 192 100 L 8 100 Z" />
+        <path d="M 20 92 A 80 80 0 0 1 180 92" fill="none" stroke="#3a3226" stroke-width="2" />
+        <g class="vu-tick">
+          <line x1="60" y1="22.72" x2="63" y2="27.92" />
+          <line x1="38.72" y1="40.56" x2="43.32" y2="44.42" />
+          <line x1="24.8" y1="64.64" x2="30.44" y2="66.69" />
+          <line x1="140" y1="22.72" x2="137" y2="27.92" />
+          <line x1="161.28" y1="40.56" x2="156.68" y2="44.42" />
+          <line x1="175.2" y1="64.64" x2="169.56" y2="66.69" />
+        </g>
+        <g class="vu-tick accent">
+          <line x1="20" y1="92" x2="26.5" y2="92" />
+          <line x1="100" y1="12" x2="100" y2="19" />
+          <line x1="180" y1="92" x2="173.5" y2="92" />
+        </g>
+        <text x="18" y="70" class="vu-scale-text">-40</text>
+        <text x="95" y="16" class="vu-scale-text">0dB</text>
+        <text x="172" y="70" class="vu-scale-text">+6</text>
+        <line id="vuNeedle" class="vu-needle" x1="100" y1="92" x2="100" y2="24"
+              stroke="#46e08a" stroke-width="3" stroke-linecap="round" />
+        <circle cx="100" cy="92" r="4" fill="#46e08a" />
+        <circle cx="100" cy="92" r="1.4" fill="#161513" />
+        <rect x="8" y="4" width="184" height="46" fill="url(#vuGlass)" clip-path="url(#vuDialClip)" />
+      </svg>
+    </div>
+
+    <div class="status-row">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Pausado</span>
+    </div>
+
+    <button class="live-button" id="liveButton">🎙️<br>Ao vivo</button>
+
+    <div id="recordingControls" style="display:none; text-align:center; margin: -8px 0 20px;">
+      <button class="action-btn neutral" id="recordToggleBtn" type="button" style="border-radius: 20px; padding: 8px 16px; display:inline-flex; align-items:center; gap:6px; font-size: 12px;">
+        <span id="recordDot" style="width:8px; height:8px; border-radius:50%; background: var(--muted-dim); display:inline-block;"></span>
+        <span id="recordBtnLabel">Gravar esta sessão</span>
+      </button>
+      <div id="recordingsList" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="control">
+      <div class="control-label">
+        <span>🎤 Ganho de entrada</span>
+        <span class="value" id="inputGainValue">70%</span>
+      </div>
+      <input type="range" id="inputGainSlider" min="0" max="150" value="70" />
+    </div>
+
+    <div class="control">
+      <div class="control-label">
+        <span>🔊 Volume de saída</span>
+        <span class="value" id="outputGainValue">0%</span>
+      </div>
+      <input type="range" id="outputGainSlider" min="0" max="100" value="0" />
+    </div>
+
+    <div class="guitar-panel" id="outputRoutePanel">
+      <div class="vu-label">Como o som está saindo?</div>
+      <select id="outputRouteSelect" class="output-route-select">
+        <option value="auto" selected>Detectar automaticamente</option>
+        <option value="headphone">Fone de ouvido (com ou sem fio)</option>
+        <option value="phone-speaker">Alto-falante do celular</option>
+        <option value="wired-speaker">Caixa com fio (cabo P2/USB-C)</option>
+        <option value="bluetooth-speaker">Caixa Bluetooth / carro / alto-falante externo</option>
+      </select>
+      <div class="string-hint" id="outputRouteHint">Detecção automática ativa.</div>
+    </div>
+
+    <div class="guitar-panel" id="processingPanel">
+      <div class="vu-label">Processamento vocal</div>
+      <div class="mode-toggle" style="margin-bottom: 4px;">
+        <button class="mode-btn" id="processingOffBtn" type="button">Off</button>
+        <button class="mode-btn active" id="processingOnBtn" type="button">On</button>
+      </div>
+      <div class="string-hint" id="processingHint">On — corta ronco grave, realça clareza e equilibra o volume da voz.</div>
+    </div>
+
+    <div class="guitar-panel" id="correctionPanel" style="border: 1px solid rgba(255,106,61,0.25);">
+      <div class="vu-label" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>🎯 Correção de afinação</span>
+        <span style="font-family: var(--font-mono); font-size: 9px; color: var(--brass); letter-spacing: 0.08em; text-transform: uppercase;">experimental</span>
+      </div>
+      <div class="mode-toggle" style="margin-bottom: 10px;">
+        <button class="mode-btn active" id="correctionOffBtn" type="button">Off</button>
+        <button class="mode-btn" id="correctionOnBtn" type="button">On</button>
+      </div>
+      <div id="correctionControls" style="display:none;">
+        <div class="control" style="margin-bottom: 0;">
+          <div class="control-label">
+            <span>🧲 Força da correção</span>
+            <span class="value" id="correctionAmountValue">70%</span>
+          </div>
+          <input type="range" id="correctionAmountSlider" min="0" max="100" value="70" />
+        </div>
+        <div class="string-hint" style="margin-top: 8px;">Puxa sua voz suavemente pra nota mais próxima. 100% é bem perceptível (efeito "robotizado"); valores por volta de 40–60% soam mais naturais.</div>
+      </div>
+      <div class="string-hint" id="correctionOffHint">Off — a afinação mostrada na tela continua funcionando normal, só não corrige o som.</div>
+    </div>
+
+    <div class="guitar-panel" id="harmonyPanel">
+      <div class="vu-label">Segunda voz</div>
+      <div class="mode-toggle" style="margin-bottom: 10px;">
+        <button class="mode-btn active" id="harmonyOffBtn" type="button">Off</button>
+        <button class="mode-btn" id="harmonyOnBtn" type="button">On</button>
+        <button class="mode-btn" id="harmonyAutoBtn" type="button">Auto</button>
+      </div>
+      <button class="drawer-toggle" id="harmonyDrawerToggle" type="button" aria-expanded="false" aria-controls="harmonyDrawer">
+        <span>Ajustes de intervalo e volume</span><span class="drawer-chevron">▾</span>
+      </button>
+      <div class="drawer" id="harmonyDrawer">
+        <div class="drawer-inner">
+          <div class="control" style="margin-bottom: 10px;">
+            <div class="control-label">
+              <span>🎼 Intervalo harmônico</span>
+            </div>
+            <select id="harmonyIntervalSelect" class="harmony-select">
+              <option value="-12">Oitava abaixo</option>
+              <option value="-5">Quarta abaixo</option>
+              <option value="-3">Terça abaixo</option>
+              <option value="4" selected>Terça acima</option>
+              <option value="7">Quinta acima</option>
+              <option value="12">Oitava acima</option>
+            </select>
+          </div>
+          <div class="control" style="margin-bottom: 0;">
+            <div class="control-label">
+              <span>🎚️ Volume da 2ª voz</span>
+              <span class="value" id="harmonyVolumeValue">35%</span>
+            </div>
+            <input type="range" id="harmonyVolumeSlider" min="0" max="100" value="35" />
+          </div>
+        </div>
+      </div>
+      <div class="string-hint" id="harmonyHint">Off — a 2ª voz não vai soar.</div>
+    </div>
+
+    <div class="guitar-panel" id="repertoirePanel" style="border: 1px solid rgba(70,224,138,0.25);">
+      <div class="vu-label" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>📋 Repertório</span>
+        <span style="font-family: var(--font-mono); font-size: 9px; color: var(--lcd-fg); letter-spacing: 0.08em; text-transform: uppercase;">novo</span>
+      </div>
+      <div class="string-hint" style="margin-bottom: 10px;">Salve cada música com tom, andamento e estilo. Tocar nela já deixa a base pronta pra praticar.</div>
+
+      <div id="repertoireListEmpty" class="string-hint" style="margin: 4px 0 10px;">Nenhuma música salva ainda.</div>
+      <div id="repertoireList" style="margin-bottom: 12px;"></div>
+
+      <input type="text" id="repSongName" placeholder="Nome da música" class="harmony-select" style="margin-bottom: 8px;" />
+      <div style="display:flex; gap:8px; margin-bottom: 8px;">
+        <select id="repSongStyle" class="harmony-select" style="flex:1;">
+          <option value="Pop">Pop</option>
+          <option value="Rock">Rock</option>
+          <option value="Sertanejo" selected>Sertanejo</option>
+          <option value="Bossa/MPB">Bossa/MPB</option>
+          <option value="Funk">Funk</option>
+          <option value="Gospel">Gospel</option>
+        </select>
+        <select id="repSongKey" class="harmony-select" style="flex:1;">
+          <option value="0">C</option><option value="1">C#/Db</option><option value="2">D</option>
+          <option value="3">D#/Eb</option><option value="4">E</option><option value="5">F</option>
+          <option value="6">F#/Gb</option><option value="7" selected>G</option><option value="8">G#/Ab</option>
+          <option value="9">A</option><option value="10">A#/Bb</option><option value="11">B</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom: 10px;">
+        <input type="number" id="repSongBpm" value="76" min="40" max="220" class="harmony-select" style="flex:1;" />
+        <button class="drawer-toggle action-btn accent-green" id="repAddBtn" type="button">
+          <span>＋ Salvar música</span>
+        </button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="drawer-toggle action-btn neutral" id="repExportBtn" type="button" style="flex:1;">
+          <span>⬇ Exportar</span>
+        </button>
+        <button class="drawer-toggle action-btn neutral" id="repImportBtn" type="button" style="flex:1;">
+          <span>⬆ Importar</span>
+        </button>
+        <input type="file" id="repImportInput" accept="application/json" style="display:none;" />
+      </div>
+    </div>
+
+    <div class="guitar-panel" id="tracksPanel">
+      <div class="vu-label">Bases por estilo</div>
+      <div class="mode-toggle" id="trackStyleFilter" style="flex-wrap: wrap; gap: 6px; padding: 4px; margin-bottom: 10px;">
+        <button class="mode-btn active" data-style="Todos" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Todos</button>
+        <button class="mode-btn" data-style="Pop" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Pop</button>
+        <button class="mode-btn" data-style="Rock" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Rock</button>
+        <button class="mode-btn" data-style="Sertanejo" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Sertanejo</button>
+        <button class="mode-btn" data-style="Bossa/MPB" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Bossa/MPB</button>
+        <button class="mode-btn" data-style="Funk" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Funk</button>
+        <button class="mode-btn" data-style="Gospel" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Gospel</button>
+        <button class="mode-btn" data-style="Outro" type="button" style="flex: 0 0 auto; padding: 7px 10px;">Outro</button>
+      </div>
+
+      <div id="trackListEmpty" class="string-hint" style="margin: 4px 0 10px;">Nenhuma faixa importada ainda.</div>
+      <div id="trackList" style="margin-bottom: 4px;"></div>
+
+      <input type="file" id="trackFileInput" accept="audio/*" multiple style="display:none;" />
+      <label id="trackStyleForImport" class="string-hint" style="display:block; margin: 8px 0 4px;">Estilo pra próxima importação:</label>
+      <select id="trackImportStyle" class="harmony-select" style="margin-bottom: 10px;">
+        <option value="Pop">Pop</option>
+        <option value="Rock">Rock</option>
+        <option value="Sertanejo">Sertanejo</option>
+        <option value="Bossa/MPB">Bossa/MPB</option>
+        <option value="Funk">Funk</option>
+        <option value="Gospel">Gospel</option>
+        <option value="Outro">Outro</option>
+      </select>
+      <button class="drawer-toggle action-btn accent-orange" id="trackAddBtn" type="button">
+        <span>＋ Adicionar faixas do celular</span>
+      </button>
+
+      <div class="control" style="margin-top: 14px; margin-bottom: 0;">
+        <div class="control-label">
+          <span>🎚️ Volume da base</span>
+          <span class="value" id="trackVolumeValue">60%</span>
+        </div>
+        <input type="range" id="trackVolumeSlider" min="0" max="100" value="60" />
+      </div>
+      <div class="string-hint" style="margin-top: 8px;">As faixas ficam só nesta sessão (não são enviadas a nenhum servidor). Recarregar a página limpa a lista.</div>
+      <audio id="trackPlayer" style="display:none;"></audio>
+    </div>
+
+    <div class="guitar-panel" id="generatorPanel">
+      <div class="vu-label">Gerar base (encaixa em qualquer tom)</div>
+      <div class="string-hint" style="margin-bottom: 10px;">Toca uma levada do estilo escolhido, no tom e andamento que você definir — não é uma música específica, então serve pra qualquer letra.</div>
+
+      <div class="control" style="margin-bottom: 10px;">
+        <div class="control-label"><span>🎵 Estilo</span></div>
+        <select id="genStyleSelect" class="harmony-select">
+          <option value="Pop">Pop</option>
+          <option value="Rock">Rock</option>
+          <option value="Sertanejo" selected>Sertanejo</option>
+          <option value="Bossa/MPB">Bossa/MPB</option>
+          <option value="Funk">Funk</option>
+          <option value="Gospel">Gospel</option>
+        </select>
+      </div>
+
+      <div class="control" style="margin-bottom: 10px;">
+        <div class="control-label"><span>🎹 Tom</span></div>
+        <select id="genKeySelect" class="harmony-select">
+          <option value="0">C</option>
+          <option value="1">C#/Db</option>
+          <option value="2">D</option>
+          <option value="3">D#/Eb</option>
+          <option value="4">E</option>
+          <option value="5">F</option>
+          <option value="6">F#/Gb</option>
+          <option value="7" selected>G</option>
+          <option value="8">G#/Ab</option>
+          <option value="9">A</option>
+          <option value="10">A#/Bb</option>
+          <option value="11">B</option>
+        </select>
+      </div>
+
+      <div class="control" style="margin-bottom: 14px;">
+        <div class="control-label">
+          <span>🥁 Andamento</span>
+          <span class="value" id="genBpmValue">76 bpm</span>
+        </div>
+        <input type="range" id="genBpmSlider" min="55" max="160" value="76" />
+      </div>
+
+      <button class="live-button" id="genPlayButton" style="width: 72px; height: 72px; margin: 0 auto 14px;">▶️<br>Base</button>
+
+      <div class="control" style="margin-bottom: 0;">
+        <div class="control-label">
+          <span>🎚️ Volume da base gerada</span>
+          <span class="value" id="genVolumeValue">55%</span>
+        </div>
+        <input type="range" id="genVolumeSlider" min="0" max="100" value="55" />
+      </div>
+    </div>
+
+    <div class="footer-row">
+      <div>
+        <span class="latency-tag" id="latencyTag"></span>
+        <span id="latencyText">Latência: -- ms</span>
+      </div>
+      <div id="outputRouteText">🔊 Saída padrão</div>
+    </div>
+
+    <div class="string-hint" id="feedbackGuardHint" style="margin-top: 6px;"></div>
+
+    <div class="serial-plate" id="serialPlate">Unidade artesanal · Nº —</div>
+  </main>
+
+<script>
+// ============================================================================
+// LB VOICE PRO — lógica do app (arquivo único, sem build step)
+// ----------------------------------------------------------------------------
+// Mapa do arquivo, na ordem em que aparece:
+//   1. AudioWorklet (detecção de pitch YIN, roda numa thread separada)
+//   2. GranularPitchShifter — motor de harmonia (2ª voz)
+//   3. PassthroughProcessor — fallback pra navegadores sem AudioWorklet
+//   4. class AudioEngine — coração do app: mic → efeitos → saída,
+//      detecção de microfonia, detecção de pitch/cents
+//   5. UI wiring — liga os controles da tela aos métodos da engine
+//   6. Modo Afinador de Violão
+//   7. Segurança contra microfonia (tetos de volume por rota de saída)
+//   8. Bases por estilo (importar arquivo local)
+//   9. Gerador de base sintetizada por estilo/tom/andamento
+//  10. Repertório (persistido em localStorage + exportar/importar JSON)
+// ============================================================================
+
+const WORKLET_SOURCE = `
+function yinDetect(buffer, sampleRate, threshold) {
+  const windowSize = buffer.length;
+  const maxTau = Math.floor(windowSize / 2);
+  const diff = new Float32Array(maxTau);
+
+  for (let tau = 1; tau < maxTau; tau++) {
+    let sum = 0;
+    for (let i = 0; i < maxTau; i++) {
+      const delta = buffer[i] - buffer[i + tau];
+      sum += delta * delta;
+    }
+    diff[tau] = sum;
+  }
+
+  const cmnd = new Float32Array(maxTau);
+  cmnd[0] = 1;
+  let runningSum = 0;
+  for (let tau = 1; tau < maxTau; tau++) {
+    runningSum += diff[tau];
+    cmnd[tau] = diff[tau] * tau / (runningSum || 1e-9);
+  }
+
+  let tauEstimate = -1;
+  for (let tau = 2; tau < maxTau - 1; tau++) {
+    if (cmnd[tau] < threshold) {
+      while (tau + 1 < maxTau - 1 && cmnd[tau + 1] < cmnd[tau]) tau++;
+      tauEstimate = tau;
+      break;
+    }
+  }
+  if (tauEstimate === -1) return null;
+
+  let betterTau = tauEstimate;
+  const x0 = tauEstimate > 0 ? cmnd[tauEstimate - 1] : cmnd[tauEstimate];
+  const x2 = tauEstimate + 1 < maxTau ? cmnd[tauEstimate + 1] : cmnd[tauEstimate];
+  const x1 = cmnd[tauEstimate];
+  const denom = (2 * x1 - x2 - x0);
+  if (denom !== 0) betterTau = tauEstimate + (x2 - x0) / (2 * denom);
+
+  const frequency = sampleRate / betterTau;
+  const confidence = 1 - cmnd[tauEstimate];
+  return { frequency, confidence };
+}
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function frequencyToNote(frequency, referenceA4) {
+  const semitonesFromA4 = 12 * Math.log2(frequency / referenceA4);
+  const roundedSemitones = Math.round(semitonesFromA4);
+  const cents = Math.round((semitonesFromA4 - roundedSemitones) * 100);
+  const noteIndex = ((roundedSemitones % 12) + 9 + 12 * 100) % 12;
+  return { name: NOTE_NAMES[noteIndex], cents, midiOffset: roundedSemitones };
+}
+
+// Pitch shifter granular: desloca a altura do áudio real capturado (não
+// gera um tom sintetizado). Mantém um buffer circular com o histórico
+// recente do sinal e lê dele com duas "cabeças" defasadas em meio grão,
+// cada uma avançando na velocidade do pitch desejado (não em tempo real).
+// A janela Hann de cada cabeça evita cliques quando ela reinicia — é essa
+// técnica (overlap-add granular) que permite mudar a altura preservando o
+// timbre, as consoantes e a respiração da voz original, em vez de trocar
+// tudo por um oscilador.
+class GranularPitchShifter {
+  constructor(sampleRateValue, grainSizeMs) {
+    this.grainSize = Math.max(64, Math.floor((sampleRateValue * grainSizeMs) / 1000));
+    this.bufferSize = this.grainSize * 4;
+    this.buffer = new Float32Array(this.bufferSize);
+    this.writePos = 0;
+    this.pitchRatio = 1;
+    this.heads = [
+      { readPos: 0, age: 0 },
+      { readPos: 0, age: Math.floor(this.grainSize / 2) },
+    ];
+  }
+
+  setPitchRatio(ratio) {
+    this.pitchRatio = ratio;
+  }
+
+  _window(age) {
+    return 0.5 - 0.5 * Math.cos((2 * Math.PI * age) / this.grainSize);
+  }
+
+  _readInterpolated(pos) {
+    const bufLen = this.bufferSize;
+    let p = pos % bufLen;
+    if (p < 0) p += bufLen;
+    const i0 = Math.floor(p);
+    const i1 = (i0 + 1) % bufLen;
+    const frac = p - i0;
+    return this.buffer[i0] * (1 - frac) + this.buffer[i1] * frac;
+  }
+
+  processSample(inputSample) {
+    this.buffer[this.writePos] = inputSample;
+    this.writePos = (this.writePos + 1) % this.bufferSize;
+
+    let output = 0;
+    for (let h = 0; h < this.heads.length; h++) {
+      const head = this.heads[h];
+      if (head.age >= this.grainSize) {
+        head.age = 0;
+        head.readPos = this.writePos - this.grainSize;
+      }
+      const sample = this._readInterpolated(head.readPos);
+      output += sample * this._window(head.age);
+      head.readPos += this.pitchRatio;
+      head.age += 1;
+    }
+    return output * 0.7;
+  }
+}
+
+class PassthroughProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.inputGain = 1;
+    this.frameCounter = 0;
+    this.reportInterval = Math.round(sampleRate * 0.05);
+    this.sumSquares = 0;
+    this.sampleCount = 0;
+
+    this.analysisWindowSize = 2048;
+    this.hopSize = 1024;
+    this.ringBuffer = new Float32Array(this.analysisWindowSize);
+    this.ringWriteIndex = 0;
+    this.samplesSinceAnalysis = 0;
+    this.referenceA4 = 440;
+    this.yinThreshold = 0.12;
+    this.minConfidence = 0.85;
+
+    // Segunda voz por pitch-shift real (não sintetizada): grão de ~40ms é
+    // um bom equilíbrio pra voz — curto o suficiente pra não borrar
+    // consoantes, longo o suficiente pra não soar picotado.
+    this.harmonyPitchRatio = Math.pow(2, 4 / 12); // padrão: terça maior
+    this.harmonyActive = false;
+    this.pitchShifter = new GranularPitchShifter(sampleRate, 40);
+
+    // Correção de afinação: puxa a voz principal em direção à nota mais
+    // próxima. Reusa a mesma técnica granular da 2ª voz, mas numa
+    // instância separada (a razão de deslocamento é diferente e muda a
+    // cada análise de pitch). Off por padrão — só entra no caminho de
+    // áudio principal quando ativada, pra não alterar em nada o som de
+    // quem não quiser usar.
+    this.correctionActive = false;
+    this.correctionAmount = 0.7; // 0 (desliga o efeito) .. 1 (correção total)
+    this.correctionShifter = new GranularPitchShifter(sampleRate, 40);
+    this.correctionTargetRatio = 1;
+    this.correctionCurrentRatio = 1;
+
+    this.port.onmessage = (event) => {
+      const { type, value } = event.data;
+      if (type === 'setInputGain') this.inputGain = value;
+      if (type === 'setReferenceA4') this.referenceA4 = value;
+      if (type === 'setHarmonyPitchRatio') this.harmonyPitchRatio = value;
+      if (type === 'setHarmonyActive') this.harmonyActive = value;
+      if (type === 'setCorrectionActive') this.correctionActive = value;
+      if (type === 'setCorrectionAmount') this.correctionAmount = value;
+    };
+  }
+
+  process(inputs, outputs) {
+    const input = inputs[0];
+    const output = outputs[0];
+    const harmonyOutput = outputs[1];
+    if (!input || input.length === 0) {
+      for (let channel = 0; channel < output.length; channel++) output[channel].fill(0);
+      if (harmonyOutput) for (let channel = 0; channel < harmonyOutput.length; channel++) harmonyOutput[channel].fill(0);
+      return true;
+    }
+
+    const inputChannel0 = input[0];
+
+    if (this.correctionActive) {
+      // Suaviza a transição da razão de afinação pra evitar "zipper noise"
+      // (salto audível) — converge em ~30-40ms, rápido o bastante pra
+      // acompanhar a voz, devagar o bastante pra não soar robótico demais.
+      for (let i = 0; i < output[0].length; i++) {
+        const raw = (inputChannel0[i] || 0) * this.inputGain;
+        this.correctionCurrentRatio += (this.correctionTargetRatio - this.correctionCurrentRatio) * 0.003;
+        this.correctionShifter.setPitchRatio(this.correctionCurrentRatio);
+        const processed = this.correctionShifter.processSample(raw);
+        for (let channel = 0; channel < output.length; channel++) output[channel][i] = processed;
+        this.sumSquares += processed * processed;
+        this.sampleCount++;
+      }
+    } else {
+      for (let channel = 0; channel < output.length; channel++) {
+        const inputChannel = input[channel] || input[0];
+        const outputChannel = output[channel];
+        for (let i = 0; i < outputChannel.length; i++) {
+          const raw = inputChannel[i] || 0;
+          const processed = raw * this.inputGain;
+          outputChannel[i] = processed;
+          this.sumSquares += processed * processed;
+          this.sampleCount++;
+        }
+      }
+    }
+
+    // Segunda saída: a mesma voz, deslocada na altura pelo pitch shifter
+    // granular — só processa quando a 2ª voz está ativa, pra economizar
+    // CPU quando ela está desligada (channelCount é sempre mono aqui).
+    if (harmonyOutput && harmonyOutput.length > 0) {
+      const harmonyChannel = harmonyOutput[0];
+      if (this.harmonyActive) {
+        this.pitchShifter.setPitchRatio(this.harmonyPitchRatio);
+        for (let i = 0; i < harmonyChannel.length; i++) {
+          const raw = (inputChannel0[i] || 0) * this.inputGain;
+          harmonyChannel[i] = this.pitchShifter.processSample(raw);
+        }
+      } else {
+        harmonyChannel.fill(0);
+      }
+      for (let channel = 1; channel < harmonyOutput.length; channel++) {
+        harmonyOutput[channel].set(harmonyChannel);
+      }
+    }
+
+    for (let i = 0; i < inputChannel0.length; i++) {
+      this.ringBuffer[this.ringWriteIndex] = inputChannel0[i] * this.inputGain;
+      this.ringWriteIndex = (this.ringWriteIndex + 1) % this.analysisWindowSize;
+    }
+    this.samplesSinceAnalysis += inputChannel0.length;
+
+    if (this.samplesSinceAnalysis >= this.hopSize) {
+      this.samplesSinceAnalysis = 0;
+
+      const ordered = new Float32Array(this.analysisWindowSize);
+      for (let i = 0; i < this.analysisWindowSize; i++) {
+        ordered[i] = this.ringBuffer[(this.ringWriteIndex + i) % this.analysisWindowSize];
+      }
+
+      const result = yinDetect(ordered, sampleRate, this.yinThreshold);
+      if (result && result.confidence >= this.minConfidence && result.frequency > 60 && result.frequency < 1200) {
+        const note = frequencyToNote(result.frequency, this.referenceA4);
+        this.port.postMessage({
+          type: 'pitch',
+          frequency: result.frequency,
+          note: note.name,
+          cents: note.cents,
+          midiOffset: note.midiOffset,
+          confidence: result.confidence,
+        });
+        // "amount" controla o quanto puxar em direção à nota mais próxima:
+        // 0 = não corrige nada, 1 = cola exatamente na nota (mais robótico).
+        const centsToRemove = note.cents * this.correctionAmount;
+        this.correctionTargetRatio = Math.pow(2, -centsToRemove / 1200);
+      } else {
+        this.port.postMessage({ type: 'pitch', frequency: null, note: null, cents: 0, confidence: 0 });
+        // Sem pitch confiável (respiração, consoante, silêncio): não força
+        // nenhuma correção pra não criar artefato — deixa a razão atual
+        // relaxar de volta a 1 aos poucos.
+        this.correctionTargetRatio = 1;
+      }
+    }
+
+    this.frameCounter += output[0].length;
+    if (this.frameCounter >= this.reportInterval) {
+      this.frameCounter = 0;
+      const rms = this.sampleCount > 0 ? Math.sqrt(this.sumSquares / this.sampleCount) : 0;
+      this.port.postMessage({ type: 'level', rms });
+      this.sumSquares = 0;
+      this.sampleCount = 0;
+    }
+
+    return true;
+  }
+}
+registerProcessor('passthrough-processor', PassthroughProcessor);
+`;
+
+// ---- Detecção de microfonia por banda estreita ----
+// Diferente de olhar só o volume total (RMS), aqui a gente analisa o
+// espectro de frequência (FFT via AnalyserNode) procurando por um pico
+// estreito e crescente — a assinatura de um loop de realimentação real,
+// já que voz e música espalham energia em várias frequências ao mesmo
+// tempo, enquanto microfonia se concentra numa só. Ao confirmar, aplica um
+// filtro notch cirúrgico só naquela frequência, sem cortar o resto do som.
+const FEEDBACK_ANALYSIS_INTERVAL_MS = 45;
+const FEEDBACK_FREQ_MIN_HZ = 150;
+const FEEDBACK_FREQ_MAX_HZ = 8000;
+const FEEDBACK_PEAKINESS_DB = 10;          // quanto o pico precisa se destacar da média do espectro
+const FEEDBACK_ABS_THRESHOLD_DB = -36;     // nível mínimo absoluto pra virar candidato
+const FEEDBACK_HISTORY_LEN = 3;            // leituras seguidas de crescimento pra confirmar
+const FEEDBACK_GROWTH_STEP_DB = 0.4;       // crescimento mínimo exigido entre leituras
+const FEEDBACK_RELEASE_THRESHOLD_DB = -45; // abaixo disso, considera resolvido
+const FEEDBACK_RELEASE_POLLS = 8;          // leituras calmas seguidas antes de soltar o notch
+const FEEDBACK_NOTCH_COUNT = 3;            // filtros notch simultâneos disponíveis
+const FEEDBACK_NOTCH_Q = 10;
+const FEEDBACK_NOTCH_INERT_HZ = 21000;     // frequência "desligada" (fora do espectro de voz)
+
+class AudioEngine {
+  constructor() {
+    this.context = null;
+    this.micStream = null;
+    this.sourceNode = null;
+    this.workletNode = null;
+    this.outputGainNode = null;
+    this.isListening = false;
+    this.onLevelUpdate = null;
+    this.onPitchUpdate = null;
+    this.onError = null;
+    this.onStateChange = null;
+    this.workletModuleUrl = null;
+    this.initialOutputGain = null;
+
+    // 'auto' pede echoCancellation:false (comportamento original, melhor
+    // fidelidade de pitch quando a saída é fone). 'bluetooth-speaker' pede
+    // echoCancellation:true, porque nesse caso o som volta pelo microfone
+    // e é o AEC nativo do navegador que sabe cancelar esse loop.
+    this.micEchoCancellation = false;
+
+    // Segunda voz por pitch-shift real: o worklet já faz o deslocamento de
+    // altura no áudio de verdade (2ª saída do AudioWorkletNode). Aqui só
+    // controlamos o envelope de volume (fade in/out) e mandamos a razão de
+    // pitch e o "liga/desliga" pro worklet via postMessage.
+    this.harmonyInputNode = null;
+    this.harmonyGain = null;
+    this.harmonyMode = 'off';
+    this.harmonyIntervalSemitones = 4;
+    this.harmonyVolume = 0.35;
+    this.harmonySafeToPlay = true;
+    this._harmonyAutoLastNote = null;
+    this._harmonyAutoHoldStart = 0;
+    this.referenceA4 = 440;
+
+    // Cadeia de processamento vocal (aplicada só no sinal de monitoramento,
+    // nunca no buffer usado pela detecção de pitch dentro do worklet).
+    // Quando desativada, os nós continuam no grafo mas com parâmetros
+    // neutros (bypass), pra não precisar reconectar o grafo em tempo real.
+    this.highpassNode = null;
+    this.presenceNode = null;
+    this.compressorNode = null;
+    this.makeupGainNode = null;
+    this.vocalProcessingEnabled = true;
+
+    // Limitador de segurança: sempre ativo, independente do processamento
+    // vocal, pra conter picos súbitos (início de microfonia, plosivas, etc).
+    this.limiterNode = null;
+
+    // Rede de segurança extra contra microfonia: monitora o nível de
+    // entrada e, se detectar crescimento sustentado típico de um loop de
+    // realimentação, corta a saída automaticamente.
+    this._feedbackRmsHistory = [];
+    this.onFeedbackDetected = null;
+
+    // Detecção por banda estreita (ver constantes FEEDBACK_* acima): tap de
+    // análise de espectro + filtros notch dinâmicos, mais precisos que o
+    // corte geral acima, que fica só como último recurso.
+    this.analyserNode = null;
+    this._analyserSink = null;
+    this._analyserData = null;
+    this._notchFilters = [];
+    this._feedbackPollTimer = null;
+    this._feedbackCandidate = null;
+    this.onFeedbackNotchEngaged = null;
+    this.onFeedbackNotchReleased = null;
+  }
+
+  async start() {
+    if (this.isListening) return;
+    try {
+      if (!this.context) {
+        this.context = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+      }
+      if (this.context.state === 'suspended') await this.context.resume();
+
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: this.micEchoCancellation,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1,
+        },
+        video: false,
+      });
+
+      if (!this.workletModuleUrl) {
+        const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
+        this.workletModuleUrl = URL.createObjectURL(blob);
+      }
+      await this.context.audioWorklet.addModule(this.workletModuleUrl);
+
+      this.sourceNode = this.context.createMediaStreamSource(this.micStream);
+      this.workletNode = new AudioWorkletNode(this.context, 'passthrough-processor', {
+        numberOfInputs: 1, numberOfOutputs: 2, channelCount: 1,
+        outputChannelCount: [1, 1],
+      });
+      this.workletNode.port.onmessage = (event) => {
+        if (event.data.type === 'level') {
+          this._checkFeedback(event.data.rms);
+          if (this.onLevelUpdate) this.onLevelUpdate(event.data.rms);
+        }
+        if (event.data.type === 'pitch') {
+          this._updateHarmony(event.data);
+          if (this.onPitchUpdate) this.onPitchUpdate(event.data);
+        }
+      };
+
+      // Cadeia de monitoramento: worklet (sinal já com ganho de entrada,
+      // mas cru pra fins de análise) -> highpass -> presença -> compressor
+      // -> ganho de saída -> limitador de segurança -> destino.
+      // Quando vocalProcessingEnabled é false, highpass/presença/compressor
+      // ficam com parâmetros neutros (bypass), então dá pra alternar em
+      // tempo real sem reconectar nada.
+      this.highpassNode = this.context.createBiquadFilter();
+      this.highpassNode.type = 'highpass';
+      this.highpassNode.frequency.value = this.vocalProcessingEnabled ? 90 : 20;
+      this.highpassNode.Q.value = 0.707;
+
+      this.presenceNode = this.context.createBiquadFilter();
+      this.presenceNode.type = 'peaking';
+      this.presenceNode.frequency.value = 4000;
+      this.presenceNode.Q.value = 1;
+      this.presenceNode.gain.value = this.vocalProcessingEnabled ? 3 : 0;
+
+      this.compressorNode = this.context.createDynamicsCompressor();
+      this.compressorNode.threshold.value = this.vocalProcessingEnabled ? -20 : 0;
+      this.compressorNode.ratio.value = this.vocalProcessingEnabled ? 3 : 1;
+      this.compressorNode.attack.value = 0.005;
+      this.compressorNode.release.value = 0.15;
+
+      // Ganho de compensação: a compressão reduz a diferença entre partes
+      // fortes e fracas, então recuperamos volume médio percebido aqui —
+      // sem isso, o sinal comprimido soa mais baixo, não mais "cheio".
+      this.makeupGainNode = this.context.createGain();
+      this.makeupGainNode.gain.value = this.vocalProcessingEnabled ? 2.0 : 1.0;
+
+      this.outputGainNode = this.context.createGain();
+      this.outputGainNode.gain.value = this.initialOutputGain != null ? this.initialOutputGain : 0.8;
+
+      // Limitador final: sempre ativo, contém qualquer pico súbito (início
+      // de microfonia, plosivas, harmonia somada) antes de chegar à saída.
+      this.limiterNode = this.context.createDynamicsCompressor();
+      this.limiterNode.threshold.value = -3;
+      this.limiterNode.ratio.value = 20;
+      this.limiterNode.attack.value = 0.002;
+      this.limiterNode.release.value = 0.1;
+
+      this.sourceNode.connect(this.workletNode);
+
+      // Filtros notch dinâmicos, inertes por padrão (frequência fora do
+      // espectro de voz). Quando a detecção por banda estreita confirma
+      // um pico de microfonia, um deles é movido pra frequência exata.
+      this._notchFilters = [];
+      let notchChainInput = this.workletNode;
+      for (let i = 0; i < FEEDBACK_NOTCH_COUNT; i++) {
+        const notch = this.context.createBiquadFilter();
+        notch.type = 'notch';
+        notch.frequency.value = FEEDBACK_NOTCH_INERT_HZ;
+        notch.Q.value = FEEDBACK_NOTCH_Q;
+        notchChainInput.connect(notch);
+        notchChainInput = notch;
+        this._notchFilters.push({ node: notch, active: false, freq: FEEDBACK_NOTCH_INERT_HZ, silentPolls: 0 });
+      }
+
+      // Tap de análise: pega o sinal cru (antes dos notches) pra sempre
+      // enxergar a ressonância real, mesmo quando já está sendo filtrada.
+      // Conectado a um ganho zero até o destino só pra continuar sendo
+      // processado pelo grafo (AnalyserNode "órfão" pode parar de rodar).
+      this.analyserNode = this.context.createAnalyser();
+      this.analyserNode.fftSize = 4096;
+      this.analyserNode.smoothingTimeConstant = 0.2;
+      this.analyserNode.minDecibels = -100;
+      this.analyserNode.maxDecibels = 0;
+      this._analyserData = new Float32Array(this.analyserNode.frequencyBinCount);
+      this.workletNode.connect(this.analyserNode);
+      this._analyserSink = this.context.createGain();
+      this._analyserSink.gain.value = 0;
+      this.analyserNode.connect(this._analyserSink);
+      this._analyserSink.connect(this.context.destination);
+
+      notchChainInput.connect(this.highpassNode);
+      this.highpassNode.connect(this.presenceNode);
+      this.presenceNode.connect(this.compressorNode);
+      this.compressorNode.connect(this.makeupGainNode);
+      this.makeupGainNode.connect(this.outputGainNode);
+      this.outputGainNode.connect(this.limiterNode);
+      this.limiterNode.connect(this.context.destination);
+
+      // Saída paralela pra gravação: exatamente o mesmo sinal que sai pro
+      // alto-falante (já com processamento/harmonia), sem afetar o volume
+      // real — é só uma "torneira" a mais no mesmo cano.
+      this.recordDestination = this.context.createMediaStreamDestination();
+      this.limiterNode.connect(this.recordDestination);
+
+      // Segunda voz: pega a saída 1 do worklet (a mesma voz, já deslocada
+      // na altura pelo pitch shifter granular) e só controla o volume/
+      // envelope aqui — nada de oscilador, é o áudio real.
+      this.harmonyGain = this.context.createGain();
+      this.harmonyGain.gain.value = 0;
+      this.harmonyInputNode = this.context.createGain();
+      this.harmonyInputNode.gain.value = 1;
+      this.workletNode.connect(this.harmonyInputNode, 1);
+      this.harmonyInputNode.connect(this.harmonyGain);
+      this.harmonyGain.connect(this.limiterNode);
+      this.workletNode.port.postMessage({ type: 'setHarmonyPitchRatio', value: Math.pow(2, this.harmonyIntervalSemitones / 12) });
+      this.workletNode.port.postMessage({ type: 'setHarmonyActive', value: this.harmonyMode !== 'off' });
+      this._feedbackRmsHistory = [];
+      this._feedbackCandidate = null;
+      this._feedbackPollTimer = setInterval(() => this._pollFeedback(), FEEDBACK_ANALYSIS_INTERVAL_MS);
+      this._harmonyAutoLastNote = null;
+      this._harmonyAutoHoldStart = 0;
+
+      this.isListening = true;
+      this.onStateChange && this.onStateChange(true);
+    } catch (err) {
+      this.onError && this.onError(err);
+      this.stop();
+    }
+  }
+
+  stop() {
+    if (this._feedbackPollTimer) { clearInterval(this._feedbackPollTimer); this._feedbackPollTimer = null; }
+    if (this.sourceNode) this.sourceNode.disconnect();
+    if (this.workletNode) this.workletNode.disconnect();
+    this._notchFilters.forEach((n) => n.node.disconnect());
+    if (this.analyserNode) this.analyserNode.disconnect();
+    if (this._analyserSink) this._analyserSink.disconnect();
+    if (this.highpassNode) this.highpassNode.disconnect();
+    if (this.presenceNode) this.presenceNode.disconnect();
+    if (this.compressorNode) this.compressorNode.disconnect();
+    if (this.makeupGainNode) this.makeupGainNode.disconnect();
+    if (this.outputGainNode) this.outputGainNode.disconnect();
+    if (this.limiterNode) this.limiterNode.disconnect();
+    if (this.harmonyInputNode) this.harmonyInputNode.disconnect();
+    if (this.harmonyGain) this.harmonyGain.disconnect();
+    if (this.micStream) this.micStream.getTracks().forEach((t) => t.stop());
+    this.sourceNode = null;
+    this.workletNode = null;
+    this._notchFilters = [];
+    this.analyserNode = null;
+    this._analyserSink = null;
+    this._analyserData = null;
+    this._feedbackCandidate = null;
+    this.highpassNode = null;
+    this.presenceNode = null;
+    this.compressorNode = null;
+    this.makeupGainNode = null;
+    this.outputGainNode = null;
+    this.limiterNode = null;
+    this.harmonyInputNode = null;
+    this.harmonyGain = null;
+    this.micStream = null;
+    this._feedbackRmsHistory = [];
+    this.isListening = false;
+    this.onStateChange && this.onStateChange(false);
+  }
+
+  // Troca o modo de captação (auto/fone vs caixa Bluetooth). Se já estiver
+  // escutando, reinicia a captura do microfone para aplicar o novo
+  // echoCancellation (não dá para trocar essa constraint em um stream já
+  // aberto — é preciso pedir getUserMedia de novo).
+  async setMicEchoCancellation(enabled) {
+    if (this.micEchoCancellation === enabled) return;
+    this.micEchoCancellation = enabled;
+    if (this.isListening) {
+      const wasOutputGain = this.outputGainNode ? this.outputGainNode.gain.value : this.initialOutputGain;
+      this.stop();
+      this.initialOutputGain = wasOutputGain;
+      await this.start();
+    }
+  }
+
+  setInputGain(value) {
+    if (this.workletNode) this.workletNode.port.postMessage({ type: 'setInputGain', value });
+  }
+
+  setPitchCorrectionActive(active) {
+    this.pitchCorrectionActive = active;
+    if (this.workletNode) this.workletNode.port.postMessage({ type: 'setCorrectionActive', value: active });
+  }
+
+  setPitchCorrectionAmount(percent) {
+    if (this.workletNode) this.workletNode.port.postMessage({ type: 'setCorrectionAmount', value: percent / 100 });
+  }
+
+  setOutputGain(value) {
+    if (this.outputGainNode) this.outputGainNode.gain.setTargetAtTime(value, this.context.currentTime, 0.01);
+  }
+
+  setHarmonyMode(mode) {
+    this.harmonyMode = mode;
+    this._harmonyAutoLastNote = null;
+    this._harmonyAutoHoldStart = 0;
+    if (mode === 'off' && this.harmonyGain && this.context) {
+      this.harmonyGain.gain.setTargetAtTime(0, this.context.currentTime, 0.05);
+    }
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: 'setHarmonyActive', value: mode !== 'off' && this.harmonySafeToPlay });
+    }
+  }
+
+  setHarmonyInterval(semitones) {
+    this.harmonyIntervalSemitones = semitones;
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: 'setHarmonyPitchRatio', value: Math.pow(2, semitones / 12) });
+    }
+  }
+
+  setHarmonyVolume(value) {
+    this.harmonyVolume = value;
+  }
+
+  setHarmonySafeToPlay(safe) {
+    this.harmonySafeToPlay = safe;
+    if (!safe && this.harmonyGain && this.context) {
+      this.harmonyGain.gain.setTargetAtTime(0, this.context.currentTime, 0.05);
+    }
+    if (this.workletNode) {
+      this.workletNode.port.postMessage({ type: 'setHarmonyActive', value: this.harmonyMode !== 'off' && safe });
+    }
+  }
+
+  // Liga/desliga a cadeia de EQ + compressão do monitoramento sem
+  // reconectar o grafo: só move os parâmetros pra um estado neutro.
+  setVocalProcessing(enabled) {
+    this.vocalProcessingEnabled = enabled;
+    if (!this.context || !this.highpassNode) return;
+    const now = this.context.currentTime;
+    if (enabled) {
+      this.highpassNode.frequency.setTargetAtTime(90, now, 0.05);
+      this.presenceNode.gain.setTargetAtTime(3, now, 0.05);
+      this.compressorNode.threshold.setTargetAtTime(-20, now, 0.05);
+      this.compressorNode.ratio.setTargetAtTime(3, now, 0.05);
+      this.makeupGainNode.gain.setTargetAtTime(2.0, now, 0.05);
+    } else {
+      this.highpassNode.frequency.setTargetAtTime(20, now, 0.05);
+      this.presenceNode.gain.setTargetAtTime(0, now, 0.05);
+      this.compressorNode.threshold.setTargetAtTime(0, now, 0.05);
+      this.compressorNode.ratio.setTargetAtTime(1, now, 0.05);
+      this.makeupGainNode.gain.setTargetAtTime(1.0, now, 0.05);
+    }
+  }
+
+  // Rede de segurança contra microfonia: se o nível de entrada crescer de
+  // forma sustentada (cada leitura mais alta que a anterior) enquanto há
+  // saída de áudio ligada, é o padrão clássico de um loop se formando —
+  // corta a saída antes que vire um guincho audível.
+  // Rede de segurança antiga (olha só o volume total): agora fica como
+  // último recurso, caso a detecção por banda estreita abaixo não dê conta
+  // (ex.: múltiplas frequências ressoando ao mesmo tempo, além dos notches
+  // disponíveis).
+  _checkFeedback(rms) {
+    if (!this.isListening || !this.outputGainNode || this.outputGainNode.gain.value <= 0.001) {
+      this._feedbackRmsHistory.length = 0;
+      return;
+    }
+    const db = rms > 0 ? 20 * Math.log10(rms) : -100;
+    this._feedbackRmsHistory.push(db);
+    if (this._feedbackRmsHistory.length > 5) this._feedbackRmsHistory.shift();
+    if (this._feedbackRmsHistory.length === 5) {
+      let sustainedGrowth = true;
+      for (let i = 1; i < this._feedbackRmsHistory.length; i++) {
+        if (this._feedbackRmsHistory[i] <= this._feedbackRmsHistory[i - 1] + 1) { sustainedGrowth = false; break; }
+      }
+      const last = this._feedbackRmsHistory[this._feedbackRmsHistory.length - 1];
+      if (sustainedGrowth && last > -9) {
+        this.outputGainNode.gain.setTargetAtTime(0, this.context.currentTime, 0.01);
+        this._feedbackRmsHistory.length = 0;
+        this.onFeedbackDetected && this.onFeedbackDetected();
+      }
+    }
+  }
+
+  // Analisa o espectro em busca de um pico estreito e crescente (assinatura
+  // de microfonia) e solta os notches que já pararam de ser necessários.
+  _pollFeedback() {
+    if (!this.analyserNode || !this._analyserData || !this.context) return;
+    this.analyserNode.getFloatFrequencyData(this._analyserData);
+    const binHz = this.context.sampleRate / this.analyserNode.fftSize;
+
+    this._updateNotchRelease(binHz);
+
+    const minBin = Math.max(1, Math.floor(FEEDBACK_FREQ_MIN_HZ / binHz));
+    const maxBin = Math.min(this._analyserData.length - 1, Math.ceil(FEEDBACK_FREQ_MAX_HZ / binHz));
+    let peakBin = -1;
+    let peakMag = -Infinity;
+    let sum = 0;
+    let count = 0;
+    for (let i = minBin; i <= maxBin; i++) {
+      const mag = this._analyserData[i];
+      sum += mag;
+      count++;
+      if (mag > peakMag) { peakMag = mag; peakBin = i; }
+    }
+    if (peakBin === -1 || count === 0) return;
+    const avgMag = sum / count;
+    const peakiness = peakMag - avgMag;
+    const peakFreq = peakBin * binHz;
+
+    if (peakiness >= FEEDBACK_PEAKINESS_DB && peakMag >= FEEDBACK_ABS_THRESHOLD_DB) {
+      this._trackFeedbackCandidate(peakFreq, peakMag, binHz);
+    } else {
+      this._feedbackCandidate = null;
+    }
+  }
+
+  // Só confirma um candidato a microfonia se a mesma frequência (com
+  // pequena tolerância de deriva) aparecer crescendo em leituras seguidas —
+  // isso separa um transiente qualquer (uma nota cantada, uma batida) de um
+  // loop de realimentação de verdade, que cresce de forma sustentada.
+  _trackFeedbackCandidate(freq, mag, binHz) {
+    const driftTolerance = binHz * 3;
+    if (this._feedbackCandidate && Math.abs(this._feedbackCandidate.freq - freq) <= driftTolerance) {
+      this._feedbackCandidate.freq = freq;
+      this._feedbackCandidate.history.push(mag);
+      if (this._feedbackCandidate.history.length > FEEDBACK_HISTORY_LEN) {
+        this._feedbackCandidate.history.shift();
+      }
+    } else {
+      this._feedbackCandidate = { freq, history: [mag] };
+    }
+
+    const hist = this._feedbackCandidate.history;
+    if (hist.length === FEEDBACK_HISTORY_LEN) {
+      let growing = true;
+      for (let i = 1; i < hist.length; i++) {
+        if (hist[i] <= hist[i - 1] + FEEDBACK_GROWTH_STEP_DB) { growing = false; break; }
+      }
+      if (growing) {
+        this._engageNotch(this._feedbackCandidate.freq);
+        this._feedbackCandidate = null;
+      }
+    }
+  }
+
+  // Move um filtro notch (existente perto dessa frequência, um livre, ou o
+  // mais antigo em uso) pra frequência confirmada como microfonia.
+  _engageNotch(freq) {
+    if (!this.context || this._notchFilters.length === 0) return;
+    let slot = this._notchFilters.find((n) => n.active && Math.abs(n.freq - freq) < 40);
+    if (!slot) slot = this._notchFilters.find((n) => !n.active);
+    if (!slot) {
+      slot = this._notchFilters.reduce((oldest, n) => (n.silentPolls <= oldest.silentPolls ? n : oldest), this._notchFilters[0]);
+    }
+    const now = this.context.currentTime;
+    slot.active = true;
+    slot.freq = freq;
+    slot.silentPolls = 0;
+    slot.node.frequency.setTargetAtTime(freq, now, 0.01);
+    slot.node.Q.setTargetAtTime(FEEDBACK_NOTCH_Q, now, 0.05);
+    this.onFeedbackNotchEngaged && this.onFeedbackNotchEngaged(freq);
+  }
+
+  // Solta os notches ativos cuja frequência já não mostra mais energia
+  // alta por várias leituras seguidas — o loop foi quebrado, não precisa
+  // mais filtrar ali.
+  _updateNotchRelease(binHz) {
+    if (!this._analyserData) return;
+    let anyStillActive = false;
+    for (const slot of this._notchFilters) {
+      if (!slot.active) continue;
+      const bin = Math.round(slot.freq / binHz);
+      const mag = this._analyserData[bin] != null ? this._analyserData[bin] : -100;
+      if (mag < FEEDBACK_RELEASE_THRESHOLD_DB) {
+        slot.silentPolls++;
+      } else {
+        slot.silentPolls = 0;
+      }
+      if (slot.silentPolls >= FEEDBACK_RELEASE_POLLS) {
+        slot.active = false;
+        slot.silentPolls = 0;
+        const now = this.context.currentTime;
+        slot.node.frequency.setTargetAtTime(FEEDBACK_NOTCH_INERT_HZ, now, 0.3);
+      } else {
+        anyStillActive = true;
+      }
+    }
+    if (!anyStillActive) this.onFeedbackNotchReleased && this.onFeedbackNotchReleased();
+  }
+
+  // Como a 2ª voz agora é a voz de verdade, deslocada na altura pelo
+  // worklet (não mais um oscilador a ser afinado), aqui só decidimos
+  // QUANDO ela deve estar audível — o "o quê" já vem pronto do worklet.
+  _updateHarmony(data) {
+    if (!this.harmonyGain || !this.context) return;
+    const now = this.context.currentTime;
+
+    if (this.harmonyMode === 'off' || !this.harmonySafeToPlay) {
+      this.harmonyGain.gain.setTargetAtTime(0, now, 0.08);
+      return;
+    }
+
+    const hasNote = !!(data.note && data.frequency);
+
+    if (this.harmonyMode === 'on') {
+      this.harmonyGain.gain.setTargetAtTime(hasNote ? this.harmonyVolume : 0, now, hasNote ? 0.06 : 0.12);
+      return;
+    }
+
+    if (this.harmonyMode === 'auto') {
+      const MIN_CONFIDENCE = 0.88;
+      const HOLD_TIME = 0.11;
+      const confident = hasNote && data.confidence >= MIN_CONFIDENCE;
+
+      if (confident) {
+        if (data.note === this._harmonyAutoLastNote) {
+          const heldFor = now - this._harmonyAutoHoldStart;
+          if (heldFor >= HOLD_TIME) {
+            this.harmonyGain.gain.setTargetAtTime(this.harmonyVolume, now, 0.09);
+          }
+        } else {
+          this._harmonyAutoLastNote = data.note;
+          this._harmonyAutoHoldStart = now;
+        }
+      } else {
+        this._harmonyAutoLastNote = null;
+        this.harmonyGain.gain.setTargetAtTime(0, now, 0.2);
+      }
+    }
+  }
+
+  getEstimatedLatencyMs() {
+    if (!this.context) return null;
+    const base = this.context.baseLatency || 0;
+    const output = this.context.outputLatency || 0;
+    return Math.round((base + output) * 1000);
+  }
+}
+
+// ---- UI wiring ----
+const engine = new AudioEngine();
+
+const liveButton = document.getElementById('liveButton');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const errorBanner = document.getElementById('errorBanner');
+const infoBanner = document.getElementById('infoBanner');
+const notchBanner = document.getElementById('notchBanner');
+const vuNeedle = document.getElementById('vuNeedle');
+const pitchNote = document.getElementById('pitchNote');
+const pitchStatus = document.getElementById('pitchStatus');
+const centsFill = document.getElementById('centsFill');
+const inputGainSlider = document.getElementById('inputGainSlider');
+const inputGainValue = document.getElementById('inputGainValue');
+const outputGainSlider = document.getElementById('outputGainSlider');
+const harmonyOffBtn = document.getElementById('harmonyOffBtn');
+const harmonyOnBtn = document.getElementById('harmonyOnBtn');
+const harmonyAutoBtn = document.getElementById('harmonyAutoBtn');
+const harmonyIntervalSelect = document.getElementById('harmonyIntervalSelect');
+const harmonyVolumeSlider = document.getElementById('harmonyVolumeSlider');
+const harmonyVolumeValue = document.getElementById('harmonyVolumeValue');
+const harmonyHint = document.getElementById('harmonyHint');
+const harmonyDrawerToggle = document.getElementById('harmonyDrawerToggle');
+const harmonyDrawer = document.getElementById('harmonyDrawer');
+const outputRouteSelect = document.getElementById('outputRouteSelect');
+const outputRouteHint = document.getElementById('outputRouteHint');
+const processingOffBtn = document.getElementById('processingOffBtn');
+const processingOnBtn = document.getElementById('processingOnBtn');
+const processingHint = document.getElementById('processingHint');
+const correctionOffBtn = document.getElementById('correctionOffBtn');
+const correctionOnBtn = document.getElementById('correctionOnBtn');
+const correctionControls = document.getElementById('correctionControls');
+const correctionOffHint = document.getElementById('correctionOffHint');
+const correctionAmountSlider = document.getElementById('correctionAmountSlider');
+const correctionAmountValue = document.getElementById('correctionAmountValue');
+
+harmonyDrawerToggle.addEventListener('click', () => {
+  const isOpen = harmonyDrawer.classList.toggle('open');
+  harmonyDrawerToggle.setAttribute('aria-expanded', String(isOpen));
+});
+const outputGainValue = document.getElementById('outputGainValue');
+const latencyTag = document.getElementById('latencyTag');
+const latencyText = document.getElementById('latencyText');
+const outputRouteText = document.getElementById('outputRouteText');
+const modeVoiceBtn = document.getElementById('modeVoiceBtn');
+const modeGuitarBtn = document.getElementById('modeGuitarBtn');
+const guitarPanel = document.getElementById('guitarPanel');
+const guitarStringsContainer = document.getElementById('guitarStrings');
+const guitarHint = document.getElementById('guitarHint');
+
+// ---- Proteção contra microfonia ----
+// A saída pode ser: fone (não realimenta o mic, sem risco), alto-falante do
+// celular, caixa com fio ou caixa Bluetooth (as três últimas realimentam o
+// mic pelo ar, precisam de cancelamento de eco + volume limitado — o
+// celular com teto mais baixo por estar fisicamente mais perto do mic) ou
+// desconhecida (trata como caixa por segurança). "outputRouteMode" guarda
+// a escolha da pessoa: 'auto' | 'headphone' | 'phone-speaker' |
+// 'wired-speaker' | 'bluetooth-speaker'.
+const HEADPHONE_KEYWORDS = ['fone', 'headphone', 'headset', 'earbud', 'earphone', 'airpod', 'fones de ouvido', 'headfone'];
+let lastOutputLooksLikeHeadphone = null; // true | false | null (desconhecido, via nome do dispositivo)
+let outputRouteMode = 'auto'; // escolha manual da pessoa no seletor
+
+// Tetos de volume por rota de saída. Antes eram a única proteção contra
+// microfonia; agora que existe detecção automática de microfonia em tempo
+// real (_checkFeedback + notch dinâmico), eles servem como uma segunda
+// camada — por isso podem ser menos conservadores do que seriam sozinhos.
+//
+// Caixa Bluetooth NÃO tem mais teto rígido: a pessoa pode usar o volume
+// que quiser. Em troca, a detecção de microfonia (_pollFeedback) roda mais
+// rápido (70ms por leitura, 3 leituras pra confirmar — ~210ms) e o corte
+// de emergência total continua ativo como último recurso. Acima do valor
+// de aviso abaixo, só mostramos um alerta visual, sem bloquear nada.
+const BLUETOOTH_SPEAKER_WARN_THRESHOLD_PERCENT = 55;
+const PHONE_SPEAKER_MAX_GAIN_PERCENT = 45;
+
+// Caixa com fio (P2/USB-C): o loop acústico som->ar->microfone é o mesmo
+// de qualquer caixa externa, independente do meio de transmissão — então
+// usamos o mesmo teto de segurança da caixa Bluetooth. A vantagem aqui é
+// a latência quase nula, sem o atraso de codec do Bluetooth.
+const WIRED_SPEAKER_MAX_GAIN_PERCENT = 65;
+
+// Volume inicial sugerido ao escolher cada rota, pra pessoa não precisar
+// subir o slider manualmente a partir de 0% pra ouvir alguma coisa.
+const BLUETOOTH_SPEAKER_DEFAULT_GAIN_PERCENT = 30;
+const PHONE_SPEAKER_DEFAULT_GAIN_PERCENT = 35;
+const WIRED_SPEAKER_DEFAULT_GAIN_PERCENT = 45;
+
+function looksLikeHeadphone(label) {
+  if (!label) return null;
+  const low = label.toLowerCase();
+  return HEADPHONE_KEYWORDS.some((k) => low.includes(k));
+}
+
+function showFeedbackWarning() {
+  errorBanner.innerHTML = '🔇 Saída silenciada automaticamente: a saída não parece ser um fone, o que pode causar microfonia. Use fone de ouvido, ou selecione "Alto-falante do celular", "Caixa com fio" ou "Caixa Bluetooth" abaixo para liberar o volume com cancelamento de eco.';
+  errorBanner.classList.add('visible');
+}
+
+function showSpeakerInfo(mode) {
+  if (mode === 'phone-speaker') {
+    infoBanner.innerHTML = `📱 Modo alto-falante do celular ativo: cancelamento de eco ligado e volume de saída limitado a ${PHONE_SPEAKER_MAX_GAIN_PERCENT}%. Mesmo assim, evite aproximar o microfone do alto-falante e use volume moderado.`;
+  } else if (mode === 'wired-speaker') {
+    infoBanner.innerHTML = `🔌 Modo caixa com fio ativo: cancelamento de eco ligado e volume de saída limitado a ${WIRED_SPEAKER_MAX_GAIN_PERCENT}%. A latência aqui é bem menor que via Bluetooth, mas o risco de microfonia é o mesmo — evite volume muito alto perto do microfone.`;
+  } else {
+    infoBanner.innerHTML = `🎧 Modo caixa Bluetooth ativo: cancelamento de eco ligado, sem teto de volume — a proteção contra microfonia agora é toda em tempo real (filtro notch automático + corte de emergência). Acima de ${BLUETOOTH_SPEAKER_WARN_THRESHOLD_PERCENT}% o risco de um pico audível antes da correção automática aumenta.`;
+  }
+  infoBanner.classList.add('visible');
+}
+
+function clearInfo() { infoBanner.classList.remove('visible'); }
+
+// Aviso visual (não bloqueia nada) quando o volume na caixa Bluetooth
+// passa do limite recomendado — a proteção real é a detecção em tempo
+// real, isso aqui é só um alerta de "ei, presta atenção".
+function updateVolumeWarning(percent) {
+  if (outputRouteMode === 'bluetooth-speaker' && percent > BLUETOOTH_SPEAKER_WARN_THRESHOLD_PERCENT) {
+    outputRouteHint.textContent = `⚠️ ${percent}% é bem alto para caixa Bluetooth — a proteção automática ainda funciona, mas um pico inicial pode ser audível antes dela agir.`;
+    outputRouteHint.style.color = '#d97706';
+  } else if (outputRouteMode === 'bluetooth-speaker') {
+    outputRouteHint.textContent = 'Cancelamento de eco ligado, sem teto de volume — proteção automática em tempo real ativa.';
+    outputRouteHint.style.color = '';
+  }
+}
+
+// ---- Modo Afinador de Violão ----
+const GUITAR_STRINGS = [
+  { id: 'E2', order: 6, note: 'Mi', freq: 82.41 },
+  { id: 'A2', order: 5, note: 'Lá', freq: 110.00 },
+  { id: 'D3', order: 4, note: 'Ré', freq: 146.83 },
+  { id: 'G3', order: 3, note: 'Sol', freq: 196.00 },
+  { id: 'B3', order: 2, note: 'Si', freq: 246.94 },
+  { id: 'E4', order: 1, note: 'Mi', freq: 329.63 },
+];
+
+let currentMode = 'voice';
+
+const HARMONY_INTERVAL_LABELS = {
+  '-12': 'oitava abaixo', '-5': 'quarta abaixo', '-3': 'terça abaixo',
+  '4': 'terça acima', '7': 'quinta acima', '12': 'oitava acima',
+};
+
+function updateHarmonyHint() {
+  if (harmonyOffBtn.classList.contains('active')) {
+    harmonyHint.textContent = 'Off — a 2ª voz não vai soar.';
+    return;
+  }
+  const intervalLabel = HARMONY_INTERVAL_LABELS[harmonyIntervalSelect.value] || '';
+  if (harmonyOnBtn.classList.contains('active')) {
+    harmonyHint.textContent = `On — acompanha em tempo integral (${intervalLabel}).`;
+  } else {
+    harmonyHint.textContent = `Auto — entra sozinha quando reconhece uma nota estável (${intervalLabel}).`;
+  }
+}
+
+function setHarmonyUiMode(mode) {
+  harmonyOffBtn.classList.toggle('active', mode === 'off');
+  harmonyOnBtn.classList.toggle('active', mode === 'on');
+  harmonyAutoBtn.classList.toggle('active', mode === 'auto');
+  engine.setHarmonyMode(mode);
+  updateHarmonyHint();
+}
+
+harmonyOffBtn.addEventListener('click', () => setHarmonyUiMode('off'));
+harmonyOnBtn.addEventListener('click', () => setHarmonyUiMode('on'));
+harmonyAutoBtn.addEventListener('click', () => setHarmonyUiMode('auto'));
+
+harmonyIntervalSelect.addEventListener('change', (e) => {
+  engine.setHarmonyInterval(Number(e.target.value));
+  updateHarmonyHint();
+});
+
+harmonyVolumeSlider.addEventListener('input', (e) => {
+  const percent = Number(e.target.value);
+  harmonyVolumeValue.textContent = `${percent}%`;
+  engine.setHarmonyVolume(percent / 100);
+});
+
+engine.setHarmonyInterval(Number(harmonyIntervalSelect.value));
+engine.setHarmonyVolume(Number(harmonyVolumeSlider.value) / 100);
+
+function renderGuitarStrings() {
+  guitarStringsContainer.innerHTML = '';
+  GUITAR_STRINGS.forEach((s) => {
+    const row = document.createElement('div');
+    row.className = 'string-row';
+    row.id = `string-row-${s.id}`;
+    row.innerHTML = `
+      <span class="string-id">${s.order}ª</span>
+      <span class="string-meta">
+        <div class="string-label">${s.note} <span style="color:var(--muted-dim)">— corda ${s.order}</span></div>
+        <div class="string-target">alvo ${s.freq.toFixed(2)} Hz</div>
+      </span>
+      <span class="string-status" id="string-status-${s.id}">—</span>
+    `;
+    guitarStringsContainer.appendChild(row);
+  });
+}
+renderGuitarStrings();
+
+function findClosestGuitarString(frequency) {
+  let closest = null;
+  let closestCents = Infinity;
+  for (const s of GUITAR_STRINGS) {
+    const cents = 1200 * Math.log2(frequency / s.freq);
+    if (Math.abs(cents) < Math.abs(closestCents)) {
+      closest = s;
+      closestCents = cents;
+    }
+  }
+  return { string: closest, cents: Math.round(closestCents) };
+}
+
+function resetGuitarRows() {
+  GUITAR_STRINGS.forEach((s) => {
+    const row = document.getElementById(`string-row-${s.id}`);
+    const status = document.getElementById(`string-status-${s.id}`);
+    row.classList.remove('active', 'in-tune');
+    status.textContent = '—';
+  });
+}
+
+function updateGuitarDisplay(data) {
+  if (!data.note || !data.frequency) {
+    resetGuitarRows();
+    pitchNote.textContent = '—';
+    pitchNote.className = 'pitch-note';
+    pitchStatus.textContent = 'Aguardando corda...';
+    centsFill.style.left = '50%';
+    centsFill.style.background = 'var(--brass)';
+    guitarHint.textContent = 'Toque uma corda por vez, deixe soar e aguarde a detecção.';
+    return;
+  }
+
+  const { string, cents } = findClosestGuitarString(data.frequency);
+  const inTune = Math.abs(cents) <= 10;
+
+  resetGuitarRows();
+  const row = document.getElementById(`string-row-${string.id}`);
+  const status = document.getElementById(`string-status-${string.id}`);
+  row.classList.add('active');
+  if (inTune) row.classList.add('in-tune');
+
+  let statusLabel;
+  let hint;
+  if (inTune) {
+    statusLabel = '✓ Afinada';
+    hint = `Corda ${string.order}ª (${string.note}) está afinada.`;
+  } else if (cents < 0) {
+    statusLabel = `▲ ${cents} ¢`;
+    hint = `Corda ${string.order}ª (${string.note}) está grave — aperte a cravelha (aumente a tensão) até afinar.`;
+  } else {
+    statusLabel = `▼ +${cents} ¢`;
+    hint = `Corda ${string.order}ª (${string.note}) está aguda — afrouxe a cravelha (diminua a tensão) até afinar.`;
+  }
+  status.textContent = statusLabel;
+  guitarHint.textContent = hint;
+
+  pitchNote.textContent = string.note;
+  pitchNote.className = 'pitch-note detected' + (inTune ? ' in-tune' : '');
+  pitchStatus.textContent = `${string.order}ª corda • ${inTune ? '✓ Afinada' : (cents > 0 ? `+${cents} cents (afrouxe)` : `${cents} cents (aperte)`)}`;
+
+  const clampedCents = Math.max(-50, Math.min(50, cents));
+  const positionPercent = 50 + (clampedCents / 50) * 45;
+  centsFill.style.left = `${positionPercent}%`;
+  centsFill.style.background = inTune ? 'var(--sage)' : 'var(--brass)';
+}
+
+let savedOutputGainBeforeGuitar = null;
+
+function setMode(mode) {
+  currentMode = mode;
+  modeVoiceBtn.classList.toggle('active', mode === 'voice');
+  modeGuitarBtn.classList.toggle('active', mode === 'guitar');
+  guitarPanel.style.display = mode === 'guitar' ? 'block' : 'none';
+  if (mode === 'guitar') {
+    resetGuitarRows();
+    setHarmonyUiMode('off');
+    if (savedOutputGainBeforeGuitar === null) {
+      savedOutputGainBeforeGuitar = Number(outputGainSlider.value);
+    }
+    outputGainSlider.value = 0;
+    outputGainValue.textContent = '0%';
+    engine.setOutputGain(0);
+    guitarHint.textContent = '🔇 Saída silenciada automaticamente (evita microfonia). Ajuste "Volume de saída" se quiser ouvir o processamento mesmo assim.';
+  } else if (savedOutputGainBeforeGuitar !== null) {
+    outputGainSlider.value = savedOutputGainBeforeGuitar;
+    outputGainValue.textContent = `${savedOutputGainBeforeGuitar}%`;
+    engine.setOutputGain(savedOutputGainBeforeGuitar / 100);
+    savedOutputGainBeforeGuitar = null;
+  }
+  pitchNote.textContent = '—';
+  pitchNote.className = 'pitch-note';
+  pitchStatus.textContent = mode === 'guitar' ? 'Aguardando corda...' : 'Aguardando sinal';
+  centsFill.style.left = '50%';
+  centsFill.style.background = 'var(--brass)';
+}
+
+modeVoiceBtn.addEventListener('click', () => setMode('voice'));
+modeGuitarBtn.addEventListener('click', () => setMode('guitar'));
+
+function checkSupport() {
+  const hasAudioContext = !!(window.AudioContext || window.webkitAudioContext);
+  let hasWorklet = false;
+  if (hasAudioContext) {
+    const tempContext = new (window.AudioContext || window.webkitAudioContext)();
+    hasWorklet = !!tempContext.audioWorklet;
+    tempContext.close();
+  }
+  const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  return hasAudioContext && hasWorklet && hasGetUserMedia;
+}
+
+function showError(message) { errorBanner.textContent = message; errorBanner.classList.add('visible'); }
+function clearError() { errorBanner.classList.remove('visible'); }
+
+function updateVuNeedle(rms) {
+  const db = rms > 0 ? 20 * Math.log10(rms) : -60;
+  const clamped = Math.max(-40, Math.min(6, db));
+  const ratio = (clamped + 40) / 46;
+  const angleDeg = -60 + ratio * 120;
+  vuNeedle.setAttribute('transform', `rotate(${angleDeg} 100 92)`);
+}
+
+let latencyInterval = null;
+
+function updateLatencyDisplay() {
+  const ms = engine.getEstimatedLatencyMs();
+  if (ms === null) {
+    latencyText.textContent = 'Latência: -- ms';
+    latencyTag.className = 'latency-tag';
+    return;
+  }
+  latencyText.textContent = `Latência: ~${ms} ms (estimativa do navegador)`;
+  latencyTag.className = 'latency-tag ' + (ms < 40 ? 'low' : ms < 80 ? 'mid' : 'high');
+}
+
+let accuracyStats = { total: 0, inTune: 0 };
+function resetAccuracyStats() {
+  accuracyStats = { total: 0, inTune: 0 };
+  updateAccuracyBadge();
+}
+function updateAccuracyBadge() {
+  const badge = document.getElementById('accuracyBadge');
+  if (!badge) return;
+  if (accuracyStats.total < 8) { badge.textContent = '—'; return; }
+  const pct = Math.round((accuracyStats.inTune / accuracyStats.total) * 100);
+  badge.textContent = `${pct}%`;
+  badge.style.color = pct >= 80 ? 'var(--sage)' : pct >= 55 ? 'var(--lcd-fg)' : 'var(--brass)';
+}
+
+function updatePitchDisplay(data) {
+  if (!data.note) {
+    pitchNote.textContent = '—';
+    pitchNote.className = 'pitch-note';
+    pitchStatus.textContent = 'Aguardando sinal';
+    centsFill.style.left = '50%';
+    centsFill.style.background = 'var(--brass)';
+    return;
+  }
+
+  const inTune = Math.abs(data.cents) <= 10;
+  const noteChanged = pitchNote.textContent !== data.note;
+  pitchNote.textContent = data.note;
+  pitchNote.className = 'pitch-note detected' + (inTune ? ' in-tune' : '') + (noteChanged ? ' flicker' : '');
+  pitchStatus.textContent = inTune ? '✓ Afinado' : (data.cents > 0 ? `+${data.cents} cents (agudo)` : `${data.cents} cents (grave)`);
+
+  const clampedCents = Math.max(-50, Math.min(50, data.cents));
+  const positionPercent = 50 + (clampedCents / 50) * 45;
+  centsFill.style.left = `${positionPercent}%`;
+  centsFill.style.background = inTune ? 'var(--sage)' : 'var(--brass)';
+
+  accuracyStats.total++;
+  if (inTune) accuracyStats.inTune++;
+  updateAccuracyBadge();
+}
+
+engine.onLevelUpdate = (rms) => updateVuNeedle(rms);
+engine.onPitchUpdate = (data) => {
+  if (currentMode === 'guitar') updateGuitarDisplay(data);
+  else updatePitchDisplay(data);
+};
+
+engine.onStateChange = (isListening) => {
+  liveButton.classList.toggle('active', isListening);
+  liveButton.textContent = isListening ? '⏸️ Pausar' : '🎙️ Ao vivo';
+  statusDot.classList.toggle('live', isListening);
+  statusText.textContent = isListening ? 'Escutando' : 'Pausado';
+  const recordingControls = document.getElementById('recordingControls');
+  if (recordingControls) recordingControls.style.display = isListening ? 'block' : 'none';
+  if (isListening) {
+    updateLatencyDisplay();
+    latencyInterval = setInterval(updateLatencyDisplay, 2000);
+    detectOutputRoute();
+  } else {
+    clearInterval(latencyInterval);
+    updateVuNeedle(0);
+    notchBanner.classList.remove('visible');
+    if (currentMode === 'guitar') updateGuitarDisplay({ note: null });
+    else updatePitchDisplay({ note: null });
+    if (window.stopVoiceRecording) window.stopVoiceRecording();
+  }
+};
+
+function setProcessingUiMode(enabled) {
+  processingOffBtn.classList.toggle('active', !enabled);
+  processingOnBtn.classList.toggle('active', enabled);
+  engine.setVocalProcessing(enabled);
+  processingHint.textContent = enabled
+    ? 'On — corta ronco grave, realça clareza e equilibra o volume da voz.'
+    : 'Off — sinal passa sem coloração, só com o ganho de entrada.';
+}
+processingOffBtn.addEventListener('click', () => setProcessingUiMode(false));
+processingOnBtn.addEventListener('click', () => setProcessingUiMode(true));
+setProcessingUiMode(true);
+
+function setCorrectionUiMode(enabled) {
+  correctionOffBtn.classList.toggle('active', !enabled);
+  correctionOnBtn.classList.toggle('active', enabled);
+  correctionControls.style.display = enabled ? 'block' : 'none';
+  correctionOffHint.style.display = enabled ? 'none' : 'block';
+  engine.setPitchCorrectionActive(enabled);
+}
+correctionOffBtn.addEventListener('click', () => setCorrectionUiMode(false));
+correctionOnBtn.addEventListener('click', () => setCorrectionUiMode(true));
+correctionAmountSlider.addEventListener('input', (e) => {
+  const percent = Number(e.target.value);
+  correctionAmountValue.textContent = `${percent}%`;
+  engine.setPitchCorrectionAmount(percent);
+});
+setCorrectionUiMode(false);
+
+engine.onFeedbackDetected = () => {
+  outputGainSlider.value = 0;
+  outputGainValue.textContent = '0%';
+  let alsoStoppedBacking = false;
+  if (window.backingAudio) {
+    if (window.backingAudio.tracks) { window.backingAudio.tracks.stop(); alsoStoppedBacking = true; }
+    if (window.backingAudio.generator) { window.backingAudio.generator.stop(); alsoStoppedBacking = true; }
+  }
+  showError(alsoStoppedBacking
+    ? '🔇 Microfonia detectada — voz e base pausadas automaticamente por segurança. Reduza o volume e tente de novo com calma.'
+    : '🔇 Microfonia detectada — saída desligada automaticamente por segurança. Reduza o volume e tente novamente com calma.');
+};
+
+let notchBannerTimeout = null;
+engine.onFeedbackNotchEngaged = (freq) => {
+  clearTimeout(notchBannerTimeout);
+  notchBanner.innerHTML = `🎯 Ressonância detectada em ~${Math.round(freq)}Hz — filtro aplicado só nessa frequência, o resto do som continua normal.`;
+  notchBanner.classList.add('visible');
+  notchBannerTimeout = setTimeout(() => notchBanner.classList.remove('visible'), 4000);
+};
+engine.onFeedbackNotchReleased = () => {
+  clearTimeout(notchBannerTimeout);
+  notchBanner.classList.remove('visible');
+};
+
+engine.onError = (err) => {
+  if (err && err.name === 'NotAllowedError') {
+    showError('Permissão de microfone negada. Toque em "Ao vivo" novamente e permita o acesso para o app funcionar.');
+  } else if (err && err.name === 'NotFoundError') {
+    showError('Nenhum microfone encontrado neste dispositivo.');
+  } else {
+    showError('Não foi possível iniciar o áudio: ' + (err && err.message ? err.message : 'erro desconhecido'));
+  }
+};
+
+liveButton.addEventListener('click', async () => {
+  clearError();
+  if (engine.isListening) {
+    engine.stop();
+  } else {
+    engine.initialOutputGain = Number(outputGainSlider.value) / 100;
+    resetAccuracyStats();
+    await engine.start();
+    engine.setInputGain(Number(inputGainSlider.value) / 100);
+    engine.setPitchCorrectionActive(correctionOnBtn.classList.contains('active'));
+    engine.setPitchCorrectionAmount(Number(correctionAmountSlider.value));
+  }
+});
+
+inputGainSlider.addEventListener('input', (e) => {
+  const percent = Number(e.target.value);
+  inputGainValue.textContent = `${percent}%`;
+  engine.setInputGain(percent / 100);
+});
+
+outputGainSlider.addEventListener('input', (e) => {
+  let percent = Number(e.target.value);
+  // Caixa Bluetooth não tem mais teto rígido (ver updateVolumeWarning).
+  // Celular e caixa com fio continuam com teto físico, por segurança.
+  const gainCap = outputRouteMode === 'phone-speaker' ? PHONE_SPEAKER_MAX_GAIN_PERCENT
+    : outputRouteMode === 'wired-speaker' ? WIRED_SPEAKER_MAX_GAIN_PERCENT
+    : null;
+  if (gainCap !== null && percent > gainCap) {
+    percent = gainCap;
+    outputGainSlider.value = percent;
+  }
+  outputGainValue.textContent = `${percent}%`;
+  engine.setOutputGain(percent / 100);
+  updateVolumeWarning(percent);
+  if (percent > 0 && errorBanner.textContent.includes('microfonia')) clearError();
+});
+
+async function detectOutputRoute() {
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const output = devices.find((d) => d.kind === 'audiooutput' && d.deviceId === 'default');
+      const label = output && output.label ? output.label : '';
+      if (label) outputRouteText.textContent = `🔊 ${label}`;
+      lastOutputLooksLikeHeadphone = looksLikeHeadphone(label);
+      applyFeedbackSafety();
+    }
+  } catch (_) { /* sem permissão prévia, mantém texto padrão */ }
+}
+
+// Decide o comportamento de segurança a partir da escolha manual da pessoa
+// (outputRouteMode) combinada com a detecção automática por nome do
+// dispositivo, quando o modo é 'auto'.
+function applyBackingRouteCap(maxPercent) {
+  if (!window.backingAudio) return;
+  Object.values(window.backingAudio).forEach((bridge) => {
+    if (maxPercent === null) bridge.clearVolumeCap();
+    else bridge.applyVolumeCap(maxPercent);
+  });
+}
+
+function applyFeedbackSafety() {
+  if (outputRouteMode === 'headphone') {
+    // Fone confirmado manualmente: sem risco de realimentação acústica,
+    // libera volume e 2ª voz normalmente, sem exigir AEC.
+    engine.setMicEchoCancellation(false);
+    engine.setHarmonySafeToPlay(true);
+    harmonyOnBtn.disabled = false;
+    harmonyAutoBtn.disabled = false;
+    outputGainSlider.removeAttribute('max');
+    applyBackingRouteCap(null);
+    updateHarmonyHint();
+    clearError();
+    clearInfo();
+    return;
+  }
+
+  if (outputRouteMode === 'bluetooth-speaker') {
+    // Caixa Bluetooth confirmada: liga cancelamento de eco nativo do
+    // navegador. Sem teto rígido de volume — a proteção agora é ativa em
+    // tempo real (notch dinâmico + corte de emergência), não um limite
+    // fixo no slider. O slider vai até 100%.
+    engine.setMicEchoCancellation(true);
+    engine.setHarmonySafeToPlay(true);
+    harmonyOnBtn.disabled = false;
+    harmonyAutoBtn.disabled = false;
+    outputGainSlider.removeAttribute('max');
+    applyBackingRouteCap(null);
+    let currentGain = Number(outputGainSlider.value);
+    if (currentGain === 0) currentGain = BLUETOOTH_SPEAKER_DEFAULT_GAIN_PERCENT;
+    outputGainSlider.value = currentGain;
+    outputGainValue.textContent = `${currentGain}%`;
+    engine.setOutputGain(currentGain / 100);
+    updateHarmonyHint();
+    clearError();
+    updateVolumeWarning(currentGain);
+    showSpeakerInfo('bluetooth-speaker');
+    return;
+  }
+
+  if (outputRouteMode === 'phone-speaker') {
+    // Alto-falante do próprio celular: mesma lógica da caixa Bluetooth
+    // (AEC ligado), mas com um teto de volume mais baixo, porque a
+    // distância física até o microfone é bem menor.
+    engine.setMicEchoCancellation(true);
+    engine.setHarmonySafeToPlay(true);
+    harmonyOnBtn.disabled = false;
+    harmonyAutoBtn.disabled = false;
+    outputGainSlider.setAttribute('max', String(PHONE_SPEAKER_MAX_GAIN_PERCENT));
+    applyBackingRouteCap(PHONE_SPEAKER_MAX_GAIN_PERCENT);
+    let currentGain = Number(outputGainSlider.value);
+    if (currentGain === 0) currentGain = PHONE_SPEAKER_DEFAULT_GAIN_PERCENT;
+    if (currentGain > PHONE_SPEAKER_MAX_GAIN_PERCENT) currentGain = PHONE_SPEAKER_MAX_GAIN_PERCENT;
+    outputGainSlider.value = currentGain;
+    outputGainValue.textContent = `${currentGain}%`;
+    engine.setOutputGain(currentGain / 100);
+    updateHarmonyHint();
+    clearError();
+    showSpeakerInfo('phone-speaker');
+    return;
+  }
+
+  if (outputRouteMode === 'wired-speaker') {
+    // Caixa ligada por cabo (P2/USB-C): mesmo risco acústico de qualquer
+    // caixa externa, mas sem a latência de codec do Bluetooth — o AEC
+    // funciona igual, pois o navegador reconhece a saída com fio como
+    // qualquer outro dispositivo de áudio do sistema.
+    engine.setMicEchoCancellation(true);
+    engine.setHarmonySafeToPlay(true);
+    harmonyOnBtn.disabled = false;
+    harmonyAutoBtn.disabled = false;
+    outputGainSlider.setAttribute('max', String(WIRED_SPEAKER_MAX_GAIN_PERCENT));
+    applyBackingRouteCap(WIRED_SPEAKER_MAX_GAIN_PERCENT);
+    let currentGain = Number(outputGainSlider.value);
+    if (currentGain === 0) currentGain = WIRED_SPEAKER_DEFAULT_GAIN_PERCENT;
+    if (currentGain > WIRED_SPEAKER_MAX_GAIN_PERCENT) currentGain = WIRED_SPEAKER_MAX_GAIN_PERCENT;
+    outputGainSlider.value = currentGain;
+    outputGainValue.textContent = `${currentGain}%`;
+    engine.setOutputGain(currentGain / 100);
+    updateHarmonyHint();
+    clearError();
+    showSpeakerInfo('wired-speaker');
+    return;
+  }
+
+  // outputRouteMode === 'auto': volta ao comportamento original, decidindo
+  // pelo nome do dispositivo de saída.
+  engine.setMicEchoCancellation(false);
+  clearInfo();
+  if (lastOutputLooksLikeHeadphone === false) {
+    const currentGain = Number(outputGainSlider.value);
+    if (currentGain > 0) {
+      outputGainSlider.value = 0;
+      outputGainValue.textContent = '0%';
+      engine.setOutputGain(0);
+    }
+    if (window.backingAudio) {
+      if (window.backingAudio.tracks) window.backingAudio.tracks.stop();
+      if (window.backingAudio.generator) window.backingAudio.generator.stop();
+    }
+    engine.setHarmonySafeToPlay(false);
+    harmonyOnBtn.disabled = true;
+    harmonyAutoBtn.disabled = true;
+    if (!harmonyOffBtn.classList.contains('active')) {
+      harmonyHint.textContent = '🔇 2ª voz bloqueada: selecione "Fone de ouvido" ou "Caixa Bluetooth" acima para liberar.';
+    }
+    showFeedbackWarning();
+  } else if (lastOutputLooksLikeHeadphone === true) {
+    engine.setHarmonySafeToPlay(true);
+    harmonyOnBtn.disabled = false;
+    harmonyAutoBtn.disabled = false;
+    updateHarmonyHint();
+    if (errorBanner.textContent.includes('microfonia')) clearError();
+  }
+}
+
+outputRouteSelect.addEventListener('change', (e) => {
+  outputRouteMode = e.target.value;
+  outputRouteHint.style.color = '';
+  if (outputRouteMode === 'headphone') {
+    outputRouteHint.textContent = 'Fone confirmado — volume e 2ª voz liberados normalmente.';
+  } else if (outputRouteMode === 'bluetooth-speaker') {
+    outputRouteHint.textContent = 'Cancelamento de eco ligado, sem teto de volume — proteção automática em tempo real ativa.';
+    outputGainSlider.removeAttribute('max');
+  } else if (outputRouteMode === 'phone-speaker') {
+    outputRouteHint.textContent = `Cancelamento de eco ligado, volume limitado a ${PHONE_SPEAKER_MAX_GAIN_PERCENT}%.`;
+    outputGainSlider.setAttribute('max', String(PHONE_SPEAKER_MAX_GAIN_PERCENT));
+  } else if (outputRouteMode === 'wired-speaker') {
+    outputRouteHint.textContent = `Cancelamento de eco ligado, volume limitado a ${WIRED_SPEAKER_MAX_GAIN_PERCENT}% (latência mínima via cabo).`;
+    outputGainSlider.setAttribute('max', String(WIRED_SPEAKER_MAX_GAIN_PERCENT));
+  } else {
+    outputRouteHint.textContent = 'Detecção automática ativa.';
+    outputGainSlider.removeAttribute('max');
+  }
+  if (outputRouteMode !== 'phone-speaker' && outputRouteMode !== 'wired-speaker') {
+    outputGainSlider.removeAttribute('max');
+  }
+  applyFeedbackSafety();
+});
+
+if (!checkSupport()) {
+  showError('Este navegador não tem suporte aos recursos de áudio que o app precisa. Tente abrir com o Chrome atualizado.');
+  liveButton.disabled = true;
+} else {
+  detectOutputRoute();
+  updateVuNeedle(0);
+}
+
+(function stampSerialPlate() {
+  const plate = document.getElementById('serialPlate');
+  if (!plate) return;
+  const now = new Date();
+  const y = now.getFullYear();
+  const seed = Math.floor(Math.random() * 9000 + 1000);
+  plate.textContent = `Unidade artesanal · LB-${y}-${seed}`;
+})();
+
+// ---- Bases por estilo -------------------------------------------------
+// Faixas são arquivos locais escolhidos pela pessoa (nada é enviado a
+// nenhum servidor). Ficam só na memória da aba: um reload limpa a lista,
+// já que URL.createObjectURL não sobrevive a isso mesmo.
+(function initTracksPanel() {
+  const fileInput = document.getElementById('trackFileInput');
+  const addBtn = document.getElementById('trackAddBtn');
+  const importStyleSelect = document.getElementById('trackImportStyle');
+  const styleFilterRow = document.getElementById('trackStyleFilter');
+  const listEl = document.getElementById('trackList');
+  const emptyEl = document.getElementById('trackListEmpty');
+  const player = document.getElementById('trackPlayer');
+  const volumeSlider = document.getElementById('trackVolumeSlider');
+  const volumeValue = document.getElementById('trackVolumeValue');
+
+  if (!fileInput || !player) return;
+
+  let tracks = []; // { id, name, style, url }
+  let activeFilter = 'Todos';
+  let playingId = null;
+  let nextId = 1;
+
+  player.volume = Number(volumeSlider.value) / 100;
+
+  addBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', () => {
+    const style = importStyleSelect.value;
+    Array.from(fileInput.files || []).forEach((file) => {
+      const url = URL.createObjectURL(file);
+      const name = file.name.replace(/\.[^/.]+$/, '');
+      tracks.push({ id: nextId++, name, style, url });
+    });
+    fileInput.value = '';
+    renderTracks();
+  });
+
+  styleFilterRow.addEventListener('click', (e) => {
+    const btn = e.target.closest('.mode-btn');
+    if (!btn) return;
+    activeFilter = btn.dataset.style;
+    Array.from(styleFilterRow.querySelectorAll('.mode-btn')).forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    renderTracks();
+  });
+
+  volumeSlider.addEventListener('input', (e) => {
+    const percent = Number(e.target.value);
+    volumeValue.textContent = `${percent}%`;
+    player.volume = percent / 100;
+  });
+
+  player.addEventListener('ended', () => {
+    playingId = null;
+    renderTracks();
+  });
+
+  function playTrack(track) {
+    if (playingId === track.id) {
+      player.pause();
+      playingId = null;
+    } else {
+      player.src = track.url;
+      player.currentTime = 0;
+      player.play().catch(() => {});
+      playingId = track.id;
+    }
+    renderTracks();
+  }
+
+  function removeTrack(id) {
+    const idx = tracks.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    if (playingId === id) { player.pause(); playingId = null; }
+    URL.revokeObjectURL(tracks[idx].url);
+    tracks.splice(idx, 1);
+    renderTracks();
+  }
+
+  function renderTracks() {
+    const visible = activeFilter === 'Todos' ? tracks : tracks.filter((t) => t.style === activeFilter);
+    emptyEl.style.display = tracks.length === 0 ? 'block' : 'none';
+    emptyEl.textContent = tracks.length === 0
+      ? 'Nenhuma faixa importada ainda.'
+      : (visible.length === 0 ? `Sem faixas em "${activeFilter}".` : '');
+    listEl.innerHTML = '';
+    visible.forEach((track) => {
+      const row = document.createElement('div');
+      row.className = 'string-row active';
+      row.style.cursor = 'pointer';
+
+      const playing = playingId === track.id;
+      row.innerHTML = `
+        <div class="string-id" style="font-size:15px;">${playing ? '⏸️' : '▶️'}</div>
+        <div class="string-meta">
+          <div class="string-label">${track.name}</div>
+          <div class="string-target">${track.style}</div>
+        </div>
+        <div class="string-status" style="cursor:pointer;" data-action="remove">Remover ✕</div>
+      `;
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="remove"]')) {
+          removeTrack(track.id);
+        } else {
+          playTrack(track);
+        }
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  renderTracks();
+
+  window.backingAudio = window.backingAudio || {};
+  window.backingAudio.tracks = {
+    stop() { player.pause(); playingId = null; renderTracks(); },
+    applyVolumeCap(maxPercent) {
+      volumeSlider.setAttribute('max', String(maxPercent));
+      if (Number(volumeSlider.value) > maxPercent) {
+        volumeSlider.value = maxPercent;
+        volumeSlider.dispatchEvent(new Event('input'));
+      }
+    },
+    clearVolumeCap() { volumeSlider.removeAttribute('max'); },
+  };
+})();
+
+// ---- Gerador de base por estilo ---------------------------------------
+// Não é uma faixa fixa: monta uma levada (bateria leve + baixo + acordes)
+// só com osciladores/ruído do Web Audio, no tom e andamento escolhidos —
+// por isso "encaixa" em qualquer música daquele estilo, não só numa.
+(function initGenerator() {
+  const styleSelect = document.getElementById('genStyleSelect');
+  const keySelect = document.getElementById('genKeySelect');
+  const bpmSlider = document.getElementById('genBpmSlider');
+  const bpmValue = document.getElementById('genBpmValue');
+  const playBtn = document.getElementById('genPlayButton');
+  const volumeSlider = document.getElementById('genVolumeSlider');
+  const volumeValue = document.getElementById('genVolumeValue');
+  if (!styleSelect || !playBtn) return;
+
+  // Progressão em graus da escala maior (semitons a partir da tônica) +
+  // qualidade de cada acorde (maior/menor). Padrões de bateria em 8
+  // colcheias por compasso (1 = toca, 0 = não). "pluck" = true dá um
+  // acorde arpejado e curto (violão/viola); false dá um "pad" mais
+  // sustentado (synth/órgão).
+  const STYLE_PRESETS = {
+    Pop:        { bpm: 100, degrees: [0, 7, 9, 5], quality: ['maj','maj','min','maj'], kick: [1,0,0,0,1,0,0,0], snare: [0,0,0,0,1,0,0,0], hat: [1,1,1,1,1,1,1,1], pluck: false, timbre: 'pad' },
+    Rock:       { bpm: 122, degrees: [0, 5, 7, 0],  quality: ['maj','maj','maj','maj'], kick: [1,0,1,0,1,0,1,0], snare: [0,0,0,0,1,0,0,0], hat: [1,1,1,1,1,1,1,1], pluck: false, timbre: 'power' },
+    Sertanejo:  { bpm: 76,  degrees: [0, 7, 9, 5],  quality: ['maj','maj','min','maj'], kick: [1,0,0,0,1,0,0,0], snare: [0,0,0,0,1,0,0,0], hat: [0,1,0,1,0,1,0,1], pluck: true,  timbre: 'viola' },
+    'Bossa/MPB':{ bpm: 92,  degrees: [0, 9, 5, 7],  quality: ['maj','min','maj','maj'], kick: [1,0,0,1,0,0,1,0], snare: [0,0,1,0,0,0,1,0], hat: [1,0,1,0,1,0,1,0], pluck: true,  timbre: 'nylon' },
+    Funk:       { bpm: 130, degrees: [0, 0, 10, 5], quality: ['min','min','maj','min'], kick: [1,0,1,1,0,1,0,0], snare: [0,0,0,0,1,0,0,1], hat: [1,1,1,1,1,1,1,1], pluck: false, timbre: 'sub' },
+    Gospel:     { bpm: 84,  degrees: [0, 5, 9, 7],  quality: ['maj','maj','min','maj'], kick: [1,0,0,0,1,0,0,0], snare: [0,0,0,0,1,0,0,0], hat: [1,1,1,1,1,1,1,1], pluck: false, timbre: 'organ' },
+  };
+
+  let genContext = null;
+  let genMasterGain = null;
+  let timerId = null;
+  let stepIndex = 0;
+  let barIndex = 0;
+  let isPlaying = false;
+
+  function ensureContext() {
+    if (!genContext) {
+      genContext = new (window.AudioContext || window.webkitAudioContext)();
+      genMasterGain = genContext.createGain();
+      genMasterGain.gain.value = Number(volumeSlider.value) / 100;
+      genMasterGain.connect(genContext.destination);
+    }
+    if (genContext.state === 'suspended') genContext.resume();
+  }
+
+  function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+  function triadFreqs(rootMidi, quality) {
+    const third = quality === 'min' ? 3 : 4;
+    return [rootMidi, rootMidi + third, rootMidi + 7].map(midiToFreq);
+  }
+
+  function playKick(time) {
+    const osc = genContext.createOscillator();
+    const gain = genContext.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, time);
+    osc.frequency.exponentialRampToValueAtTime(45, time + 0.12);
+    gain.gain.setValueAtTime(0.9, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
+    osc.connect(gain).connect(genMasterGain);
+    osc.start(time); osc.stop(time + 0.2);
+  }
+
+  function playNoiseHit(time, duration, freqLow, freqHigh, gainPeak) {
+    const bufferSize = Math.floor(genContext.sampleRate * duration);
+    const buffer = genContext.createBuffer(1, bufferSize, genContext.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const src = genContext.createBufferSource();
+    src.buffer = buffer;
+    const band = genContext.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = (freqLow + freqHigh) / 2;
+    band.Q.value = 0.7;
+    const gain = genContext.createGain();
+    gain.gain.setValueAtTime(gainPeak, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+    src.connect(band).connect(gain).connect(genMasterGain);
+    src.start(time); src.stop(time + duration);
+  }
+
+  function playBass(freq, time, duration) {
+    const osc = genContext.createOscillator();
+    const gain = genContext.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq / 2;
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(0.5, time + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+    osc.connect(gain).connect(genMasterGain);
+    osc.start(time); osc.stop(time + duration + 0.05);
+  }
+
+  function playChord(freqs, time, duration, timbre) {
+    const waveByTimbre = { pad: 'sawtooth', power: 'square', viola: 'triangle', nylon: 'sine', sub: 'sawtooth', organ: 'sine' };
+    const wave = waveByTimbre[timbre] || 'sawtooth';
+    freqs.forEach((f, i) => {
+      const osc = genContext.createOscillator();
+      const gain = genContext.createGain();
+      osc.type = wave;
+      osc.frequency.value = f;
+      const peak = timbre === 'power' ? 0.16 : 0.11;
+      gain.gain.setValueAtTime(0.0001, time);
+      gain.gain.exponentialRampToValueAtTime(peak, time + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+      osc.connect(gain).connect(genMasterGain);
+      osc.start(time + i * 0.006); osc.stop(time + duration + 0.05);
+    });
+  }
+
+  function scheduleStep(preset, rootMidiBase, time) {
+    const stepDur = (60 / Number(bpmSlider.value)) / 2;
+    if (preset.kick[stepIndex]) playKick(time);
+    if (preset.snare[stepIndex]) playNoiseHit(time, 0.09, 1500, 5000, 0.35);
+    if (preset.hat[stepIndex]) playNoiseHit(time, 0.035, 6000, 11000, 0.12);
+
+    if (stepIndex === 0) {
+      const chordIdx = barIndex % preset.degrees.length;
+      const rootMidi = rootMidiBase + preset.degrees[chordIdx];
+      const freqs = triadFreqs(rootMidi, preset.quality[chordIdx]);
+      playBass(midiToFreq(rootMidi), time, stepDur * 3.6);
+      if (preset.pluck) {
+        playChord(freqs, time, stepDur * 1.3, preset.timbre);
+        playChord(freqs, time + stepDur * 3, stepDur * 1.1, preset.timbre);
+      } else {
+        playChord(freqs, time, stepDur * 7.6, preset.timbre);
+      }
+      barIndex++;
+    } else if (preset.pluck && stepIndex === 5) {
+      const chordIdx = (barIndex - 1 + preset.degrees.length) % preset.degrees.length;
+      const rootMidi = rootMidiBase + preset.degrees[chordIdx];
+      playBass(midiToFreq(rootMidi + 7), time, stepDur * 1.2);
+    }
+
+    stepIndex = (stepIndex + 1) % 8;
+  }
+
+  function tick() {
+    if (!isPlaying) return;
+    const preset = STYLE_PRESETS[styleSelect.value];
+    const rootMidiBase = 48 + Number(keySelect.value);
+    const stepDur = (60 / Number(bpmSlider.value)) / 2;
+    scheduleStep(preset, rootMidiBase, genContext.currentTime + 0.02);
+    timerId = setTimeout(tick, stepDur * 1000);
+  }
+
+  function start() {
+    ensureContext();
+    isPlaying = true;
+    stepIndex = 0;
+    barIndex = 0;
+    playBtn.classList.add('active');
+    playBtn.innerHTML = '⏸️<br>Base';
+    tick();
+  }
+
+  function stop() {
+    isPlaying = false;
+    if (timerId) clearTimeout(timerId);
+    playBtn.classList.remove('active');
+    playBtn.innerHTML = '▶️<br>Base';
+  }
+
+  playBtn.addEventListener('click', () => { isPlaying ? stop() : start(); });
+
+  bpmSlider.addEventListener('input', (e) => {
+    bpmValue.textContent = `${e.target.value} bpm`;
+  });
+
+  styleSelect.addEventListener('change', () => {
+    const preset = STYLE_PRESETS[styleSelect.value];
+    bpmSlider.value = preset.bpm;
+    bpmValue.textContent = `${preset.bpm} bpm`;
+  });
+
+  volumeSlider.addEventListener('input', (e) => {
+    const percent = Number(e.target.value);
+    volumeValue.textContent = `${percent}%`;
+    if (genMasterGain) genMasterGain.gain.setTargetAtTime(percent / 100, genContext.currentTime, 0.02);
+  });
+
+  // Exposto pro Repertório aplicar tom/estilo/bpm de uma música e já tocar.
+  window.applyGeneratorPreset = function applyGeneratorPreset(style, keyValue, bpm, autoplay) {
+    styleSelect.value = style;
+    keySelect.value = String(keyValue);
+    bpmSlider.value = bpm;
+    bpmValue.textContent = `${bpm} bpm`;
+    if (autoplay && !isPlaying) start();
+  };
+
+  // Ponte pro sistema anti-microfonia: em caso de corte de emergência ou
+  // mudança de rota de saída, ele consegue parar/limitar esta base também.
+  window.backingAudio = window.backingAudio || {};
+  window.backingAudio.generator = {
+    stop() { stop(); },
+    applyVolumeCap(maxPercent) {
+      volumeSlider.setAttribute('max', String(maxPercent));
+      if (Number(volumeSlider.value) > maxPercent) {
+        volumeSlider.value = maxPercent;
+        volumeSlider.dispatchEvent(new Event('input'));
+      }
+    },
+    clearVolumeCap() { volumeSlider.removeAttribute('max'); },
+  };
+})();
+
+// ---- Gravação de performance --------------------------------------------
+// Captura exatamente o áudio que sai pro alto-falante (voz processada +
+// harmonia, se ligada), usando o MediaStreamAudioDestinationNode que a
+// engine já expõe. Grava só enquanto "Ao vivo" está ativo; as tomadas
+// ficam na sessão (mesma lógica das faixas importadas) com play/download.
+(function initRecording() {
+  const toggleBtn = document.getElementById('recordToggleBtn');
+  const dot = document.getElementById('recordDot');
+  const label = document.getElementById('recordBtnLabel');
+  const listEl = document.getElementById('recordingsList');
+  if (!toggleBtn) return;
+
+  let mediaRecorder = null;
+  let chunks = [];
+  let isRecording = false;
+  let nextId = 1;
+  const takes = []; // { id, url, duration }
+  let recordStartedAt = 0;
+
+  function supported() {
+    return typeof MediaRecorder !== 'undefined' && engine.recordDestination;
+  }
+
+  function startRecording() {
+    if (!supported()) {
+      showError('Este navegador não consegue gravar áudio localmente — o resto do app continua funcionando normal.');
+      return;
+    }
+    chunks = [];
+    try {
+      mediaRecorder = new MediaRecorder(engine.recordDestination.stream);
+    } catch (_) {
+      showError('Não consegui iniciar a gravação neste navegador.');
+      return;
+    }
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      if (chunks.length === 0) return;
+      const blob = new Blob(chunks, { type: chunks[0].type || 'audio/webm' });
+      const url = URL.createObjectURL(blob);
+      const durationSec = Math.max(1, Math.round((Date.now() - recordStartedAt) / 1000));
+      takes.unshift({ id: nextId++, url, duration: durationSec });
+      renderTakes();
+    };
+    mediaRecorder.start();
+    recordStartedAt = Date.now();
+    isRecording = true;
+    dot.style.background = 'var(--danger)';
+    dot.style.boxShadow = '0 0 6px var(--danger)';
+    label.textContent = 'Parar gravação';
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && isRecording) mediaRecorder.stop();
+    isRecording = false;
+    dot.style.background = 'var(--muted-dim)';
+    dot.style.boxShadow = 'none';
+    label.textContent = 'Gravar esta sessão';
+  }
+
+  toggleBtn.addEventListener('click', () => { isRecording ? stopRecording() : startRecording(); });
+
+  function formatDuration(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function renderTakes() {
+    listEl.innerHTML = '';
+    takes.forEach((take) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; justify-content:center; margin-top:6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);';
+      row.innerHTML = `
+        <audio controls src="${take.url}" style="height:28px; max-width:180px;"></audio>
+        <span>${formatDuration(take.duration)}</span>
+        <a href="${take.url}" download="gravacao-lb-voice-pro-${take.id}.webm" style="color: var(--brass); text-decoration:none;">⬇</a>
+      `;
+      listEl.appendChild(row);
+    });
+  }
+
+  // Parar automaticamente se a sessão ao vivo for encerrada.
+  window.stopVoiceRecording = () => { if (isRecording) stopRecording(); };
+})();
+
+// ---- Repertório --------------------------------------------------------
+// Une afinação/base num fluxo por música: salva nome + tom + estilo + bpm,
+// e "Praticar" já configura o gerador de base com esses valores.
+(function initRepertoire() {
+  const nameInput = document.getElementById('repSongName');
+  const styleSelect = document.getElementById('repSongStyle');
+  const keySelect = document.getElementById('repSongKey');
+  const bpmInput = document.getElementById('repSongBpm');
+  const addBtn = document.getElementById('repAddBtn');
+  const listEl = document.getElementById('repertoireList');
+  const emptyEl = document.getElementById('repertoireListEmpty');
+  const exportBtn = document.getElementById('repExportBtn');
+  const importBtn = document.getElementById('repImportBtn');
+  const importInput = document.getElementById('repImportInput');
+  if (!nameInput || !addBtn) return;
+
+  const STORAGE_KEY = 'lbVoicePro.repertoire.v1';
+  const KEY_NAMES = ['C','C#/Db','D','D#/Eb','E','F','F#/Gb','G','G#/Ab','A','A#/Bb','B'];
+  const STYLE_NAMES = ['Pop','Rock','Sertanejo','Bossa/MPB','Funk','Gospel'];
+  let songs = [];
+  let nextId = 1;
+
+  function safeLoad() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return []; }
+  }
+
+  function safeSave() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(songs)); } catch (_) { /* modo privado etc: segue sem persistir */ }
+  }
+
+  songs = safeLoad();
+  nextId = songs.reduce((max, s) => Math.max(max, s.id || 0), 0) + 1;
+
+  addBtn.addEventListener('click', () => {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    const bpm = Math.min(220, Math.max(40, Number(bpmInput.value) || 76));
+    songs.push({ id: nextId++, name, style: styleSelect.value, key: Number(keySelect.value), bpm });
+    nameInput.value = '';
+    safeSave();
+    render();
+  });
+
+  nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBtn.click(); });
+
+  exportBtn.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(songs, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'repertorio-lb-voice-pro.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  importBtn.addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', () => {
+    const file = importInput.files && importInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!Array.isArray(parsed)) throw new Error('formato inválido');
+        parsed.forEach((s) => {
+          if (!s || !s.name) return;
+          songs.push({
+            id: nextId++,
+            name: String(s.name).slice(0, 80),
+            style: STYLE_NAMES.includes(s.style) ? s.style : 'Pop',
+            key: Number.isFinite(Number(s.key)) ? Math.min(11, Math.max(0, Number(s.key))) : 0,
+            bpm: Number.isFinite(Number(s.bpm)) ? Math.min(220, Math.max(40, Number(s.bpm))) : 76,
+          });
+        });
+        safeSave();
+        render();
+      } catch (_) {
+        alert('Não consegui ler esse arquivo — confira se é um export do próprio app.');
+      }
+      importInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  function removeSong(id) {
+    songs = songs.filter((s) => s.id !== id);
+    safeSave();
+    render();
+  }
+
+  function practice(song) {
+    if (window.applyGeneratorPreset) {
+      window.applyGeneratorPreset(song.style, song.key, song.bpm, true);
+    }
+    const genPanel = document.getElementById('generatorPanel');
+    if (genPanel) {
+      genPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      genPanel.style.transition = 'box-shadow 200ms ease';
+      genPanel.style.boxShadow = '0 0 0 2px var(--lcd-fg), 0 0 20px var(--lcd-glow)';
+      setTimeout(() => { genPanel.style.boxShadow = ''; }, 1400);
+    }
+  }
+
+  function render() {
+    emptyEl.style.display = songs.length === 0 ? 'block' : 'none';
+    listEl.innerHTML = '';
+    songs.forEach((song) => {
+      const row = document.createElement('div');
+      row.className = 'string-row active';
+      row.style.cursor = 'pointer';
+      row.innerHTML = `
+        <div class="string-id" style="font-size:15px;">▶️</div>
+        <div class="string-meta">
+          <div class="string-label">${song.name}</div>
+          <div class="string-target">${song.style} · ${KEY_NAMES[song.key]} · ${song.bpm} bpm</div>
+        </div>
+        <div class="string-status" style="cursor:pointer;" data-action="remove">Remover ✕</div>
+      `;
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="remove"]')) {
+          removeSong(song.id);
+        } else {
+          practice(song);
+        }
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
